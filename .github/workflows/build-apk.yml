@@ -1,0 +1,508 @@
+name: FilmFilter APK
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - main
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Setup Android SDK
+        uses: android-actions/setup-android@v4
+        with:
+          packages: 'platforms;android-35 build-tools;35.0.0'
+
+      - name: Setup Gradle
+        uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.9'
+
+      - name: Create Android project
+        shell: bash
+        run: |
+          set -e
+
+          mkdir -p app/src/main/java/com/example/filmfilter
+          mkdir -p app/src/main/res/values
+          mkdir -p app/src/main/res/drawable
+
+          cat > settings.gradle <<'EOF'
+          pluginManagement {
+              repositories {
+                  google()
+                  mavenCentral()
+                  gradlePluginPortal()
+              }
+          }
+
+          dependencyResolutionManagement {
+              repositoriesMode.set(RepositoriesMode.FAIL_ON_PROJECT_REPOS)
+              repositories {
+                  google()
+                  mavenCentral()
+              }
+          }
+
+          rootProject.name = "FilmFilter"
+          include(":app")
+          EOF
+
+          cat > build.gradle <<'EOF'
+          plugins {
+              id 'com.android.application' version '8.7.3' apply false
+          }
+          EOF
+
+          cat > gradle.properties <<'EOF'
+          android.useAndroidX=true
+          android.nonTransitiveRClass=true
+          EOF
+
+          cat > app/build.gradle <<'EOF'
+          plugins {
+              id 'com.android.application'
+          }
+
+          android {
+              namespace 'com.example.filmfilter'
+              compileSdk 35
+
+              defaultConfig {
+                  applicationId 'com.example.filmfilter'
+                  minSdk 24
+                  targetSdk 35
+                  versionCode 1
+                  versionName '1.0'
+              }
+          }
+          EOF
+
+          cat > app/src/main/AndroidManifest.xml <<'EOF'
+          <manifest xmlns:android="http://schemas.android.com/apk/res/android">
+
+              <application
+                  android:theme="@style/AppTheme"
+                  android:label="FilmFilter">
+
+                  <activity
+                      android:name=".MainActivity"
+                      android:exported="true">
+
+                      <intent-filter>
+                          <action android:name="android.intent.action.MAIN" />
+                          <category android:name="android.intent.category.LAUNCHER" />
+                      </intent-filter>
+
+                  </activity>
+
+              </application>
+
+          </manifest>
+          EOF
+
+          cat > app/src/main/res/values/styles.xml <<'EOF'
+          <resources>
+              <style
+                  name="AppTheme"
+                  parent="android:style/Theme.Material.Light.NoActionBar">
+
+                  <item name="android:fontFamily">sans</item>
+                  <item name="android:colorAccent">#333333</item>
+                  <item name="android:navigationBarColor">#000000</item>
+                  <item name="android:statusBarColor">#000000</item>
+
+              </style>
+          </resources>
+          EOF
+
+          cat > app/src/main/java/com/example/filmfilter/MainActivity.java <<'EOF'
+          package com.example.filmfilter;
+
+          import android.app.Activity;
+          import android.content.Intent;
+          import android.graphics.Bitmap;
+          import android.graphics.BitmapFactory;
+          import android.graphics.Color;
+          import android.net.Uri;
+          import android.os.Bundle;
+          import android.view.Gravity;
+          import android.widget.Button;
+          import android.widget.ImageView;
+          import android.widget.LinearLayout;
+          import android.widget.TextView;
+
+          import java.io.InputStream;
+
+          public class MainActivity extends Activity {
+
+              private static final int PICK_IMAGE = 100;
+
+              private ImageView imageView;
+              private Bitmap original;
+
+              @Override
+              protected void onCreate(Bundle savedInstanceState) {
+                  super.onCreate(savedInstanceState);
+                  makeUI();
+              }
+
+              private void makeUI() {
+
+                  LinearLayout root = new LinearLayout(this);
+                  root.setOrientation(LinearLayout.VERTICAL);
+                  root.setPadding(24, 24, 24, 24);
+
+                  TextView title = new TextView(this);
+                  title.setText("FilmFilter");
+                  title.setTextSize(26);
+                  title.setGravity(Gravity.CENTER);
+
+                  root.addView(
+                      title,
+                      new LinearLayout.LayoutParams(-1, 70)
+                  );
+
+                  imageView = new ImageView(this);
+                  imageView.setBackgroundColor(
+                      Color.rgb(235, 235, 235)
+                  );
+                  imageView.setScaleType(
+                      ImageView.ScaleType.FIT_CENTER
+                  );
+
+                  LinearLayout.LayoutParams imageParams =
+                      new LinearLayout.LayoutParams(
+                          -1,
+                          0,
+                          1
+                      );
+
+                  imageParams.topMargin = 15;
+                  imageParams.bottomMargin = 15;
+
+                  root.addView(imageView, imageParams);
+
+                  LinearLayout buttons = new LinearLayout(this);
+                  buttons.setOrientation(
+                      LinearLayout.HORIZONTAL
+                  );
+
+                  Button select = new Button(this);
+                  select.setText("사진 선택");
+                  select.setOnClickListener(
+                      v -> selectPhoto()
+                  );
+
+                  buttons.addView(
+                      select,
+                      new LinearLayout.LayoutParams(
+                          0,
+                          -2,
+                          1
+                      )
+                  );
+
+                  Button filter = new Button(this);
+                  filter.setText("필터 적용");
+                  filter.setOnClickListener(
+                      v -> applyFilm()
+                  );
+
+                  buttons.addView(
+                      filter,
+                      new LinearLayout.LayoutParams(
+                          0,
+                          -2,
+                          1
+                      )
+                  );
+
+                  root.addView(
+                      buttons,
+                      new LinearLayout.LayoutParams(
+                          -1,
+                          -2
+                      )
+                  );
+
+                  setContentView(root);
+              }
+
+              private void selectPhoto() {
+
+                  Intent intent = new Intent(
+                      Intent.ACTION_OPEN_DOCUMENT
+                  );
+
+                  intent.setType("image/*");
+                  intent.addCategory(
+                      Intent.CATEGORY_OPENABLE
+                  );
+
+                  startActivityForResult(
+                      intent,
+                      PICK_IMAGE
+                  );
+              }
+
+              @Override
+              protected void onActivityResult(
+                  int requestCode,
+                  int resultCode,
+                  Intent data
+              ) {
+
+                  super.onActivityResult(
+                      requestCode,
+                      resultCode,
+                      data
+                  );
+
+                  if (
+                      requestCode == PICK_IMAGE &&
+                      resultCode == RESULT_OK &&
+                      data != null &&
+                      data.getData() != null
+                  ) {
+
+                      try {
+
+                          Uri uri = data.getData();
+
+                          InputStream input =
+                              getContentResolver()
+                                  .openInputStream(uri);
+
+                          Bitmap bitmap =
+                              BitmapFactory.decodeStream(input);
+
+                          input.close();
+
+                          original = resize(
+                              bitmap,
+                              1600
+                          );
+
+                          imageView.setImageBitmap(
+                              original
+                          );
+
+                      } catch (Exception e) {
+                          e.printStackTrace();
+                      }
+                  }
+              }
+
+              private Bitmap resize(
+                  Bitmap bitmap,
+                  int max
+              ) {
+
+                  if (bitmap == null) {
+                      return null;
+                  }
+
+                  int w = bitmap.getWidth();
+                  int h = bitmap.getHeight();
+
+                  int longest = Math.max(w, h);
+
+                  if (longest <= max) {
+                      return bitmap;
+                  }
+
+                  float scale =
+                      max / (float) longest;
+
+                  return Bitmap.createScaledBitmap(
+                      bitmap,
+                      Math.round(w * scale),
+                      Math.round(h * scale),
+                      true
+                  );
+              }
+
+              private void applyFilm() {
+
+                  if (original == null) {
+                      return;
+                  }
+
+                  Bitmap result =
+                      original.copy(
+                          Bitmap.Config.ARGB_8888,
+                          true
+                      );
+
+                  int width = result.getWidth();
+                  int height = result.getHeight();
+
+                  int[] pixels =
+                      new int[width * height];
+
+                  result.getPixels(
+                      pixels,
+                      0,
+                      width,
+                      0,
+                      0,
+                      width,
+                      height
+                  );
+
+                  for (int i = 0; i < pixels.length; i++) {
+
+                      int pixel = pixels[i];
+
+                      float r =
+                          Color.red(pixel) / 255f;
+
+                      float g =
+                          Color.green(pixel) / 255f;
+
+                      float b =
+                          Color.blue(pixel) / 255f;
+
+                      float[] rgb =
+                          filmLook(r, g, b);
+
+                      pixels[i] = Color.argb(
+                          Color.alpha(pixel),
+                          Math.round(rgb[0] * 255),
+                          Math.round(rgb[1] * 255),
+                          Math.round(rgb[2] * 255)
+                      );
+                  }
+
+                  result.setPixels(
+                      pixels,
+                      0,
+                      width,
+                      0,
+                      0,
+                      width,
+                      height
+                  );
+
+                  imageView.setImageBitmap(result);
+              }
+
+              private float[] filmLook(
+                  float r,
+                  float g,
+                  float b
+              ) {
+
+                  // Kodak 계열의 부드러운 톤
+                  r = (float)Math.pow(r, 0.96);
+                  g = (float)Math.pow(g, 0.96);
+                  b = (float)Math.pow(b, 0.96);
+
+                  r = 0.055f + 0.89f * r;
+                  g = 0.055f + 0.89f * g;
+                  b = 0.055f + 0.89f * b;
+
+                  // 밝기
+                  float lum =
+                      0.2126f * r +
+                      0.7152f * g +
+                      0.0722f * b;
+
+                  // 살짝 바랜 채도
+                  float saturation =
+                      0.91f - 0.06f * lum;
+
+                  r = lum + (r - lum) * saturation;
+                  g = lum + (g - lum) * saturation;
+                  b = lum + (b - lum) * saturation;
+
+                  // 따뜻한 하이라이트
+                  float highlight =
+                      Math.max(
+                          0f,
+                          (lum - 0.42f) / 0.58f
+                      );
+
+                  r += 0.018f * highlight;
+                  g += 0.010f * highlight;
+                  b -= 0.020f * highlight;
+
+                  // 약간의 필름 그린
+                  float mid =
+                      Math.max(
+                          0f,
+                          1f -
+                          Math.abs(lum - 0.52f)
+                          / 0.52f
+                      );
+
+                  g += 0.008f * mid;
+                  b -= 0.006f * mid;
+
+                  // 피부 보호
+                  float skin =
+                      Math.max(
+                          0f,
+                          Math.min(
+                              1f,
+                              (r - b) * 1.7f
+                          )
+                      );
+
+                  r += 0.012f * skin;
+                  b -= 0.008f * skin;
+
+                  return new float[]{
+                      clamp(r),
+                      clamp(g),
+                      clamp(b)
+                  };
+              }
+
+              private float clamp(float value) {
+
+                  return Math.max(
+                      0f,
+                      Math.min(
+                          1f,
+                          value
+                      )
+                  );
+              }
+          }
+          EOF
+
+      - name: Build APK
+        shell: bash
+        run: |
+          set -e
+          gradle assembleDebug --stacktrace
+
+      - name: Check APK
+        shell: bash
+        run: |
+          set -e
+          echo "Generated APK files:"
+          find . -type f -name "*.apk" -print
+
+          test -f app/build/outputs/apk/debug/app-debug.apk
+
+      - name: Upload APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: FilmFilter-debug-apk
+          path: app/build/outputs/apk/debug/app-debug.apk
+          if-no-files-found: error
