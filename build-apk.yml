@@ -1,4 +1,4 @@
-name: FilmFilter APK 빌드
+name: FilmFilter APK
 
 on:
   workflow_dispatch:
@@ -11,65 +11,35 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-
-      # ==================================================
-      # 1. GitHub 저장소 가져오기
-      # ==================================================
-
-      - name: 저장소 가져오기
+      - name: Checkout
         uses: actions/checkout@v4
 
-
-      # ==================================================
-      # 2. Java 설정
-      # ==================================================
-
-      - name: Java 17 설정
+      - name: Setup Java
         uses: actions/setup-java@v4
         with:
           distribution: temurin
           java-version: '17'
 
-
-      # ==================================================
-      # 3. Android SDK 설정
-      # ==================================================
-
-      - name: Android SDK 설정
+      - name: Setup Android SDK
         uses: android-actions/setup-android@v4
         with:
           packages: 'platforms;android-35 build-tools;35.0.0'
 
-
-      # ==================================================
-      # 4. Gradle 설정
-      # ==================================================
-
-      - name: Gradle 설정
+      - name: Setup Gradle
         uses: gradle/actions/setup-gradle@v4
         with:
           gradle-version: '8.9'
 
-
-      # ==================================================
-      # 5. Android 프로젝트 폴더 생성
-      # ==================================================
-
-      - name: Android 프로젝트 생성
+      - name: Create Android project
         shell: bash
         run: |
+          set -e
 
           mkdir -p app/src/main/java/com/example/filmfilter
           mkdir -p app/src/main/res/values
-          mkdir -p app/src/main/assets
-
-
-      # ==================================================
-      # 6. settings.gradle
-      # ==================================================
+          mkdir -p app/src/main/res/drawable
 
           cat > settings.gradle <<'EOF'
-
           pluginManagement {
               repositories {
                   google()
@@ -79,10 +49,7 @@ jobs:
           }
 
           dependencyResolutionManagement {
-              repositoriesMode.set(
-                  RepositoriesMode.FAIL_ON_PROJECT_REPOS
-              )
-
+              repositoriesMode.set(RepositoriesMode.FAIL_ON_PROJECT_REPOS)
               repositories {
                   google()
                   mavenCentral()
@@ -90,96 +57,53 @@ jobs:
           }
 
           rootProject.name = "FilmFilter"
-
           include(":app")
-
           EOF
 
-
-      # ==================================================
-      # 7. 최상위 build.gradle
-      # ==================================================
-
           cat > build.gradle <<'EOF'
-
           plugins {
               id 'com.android.application' version '8.7.3' apply false
           }
-
           EOF
-
-
-      # ==================================================
-      # 8. gradle.properties
-      # ==================================================
 
           cat > gradle.properties <<'EOF'
-
           android.useAndroidX=true
           android.nonTransitiveRClass=true
-
           EOF
 
-
-      # ==================================================
-      # 9. app/build.gradle
-      # ==================================================
-
           cat > app/build.gradle <<'EOF'
-
           plugins {
               id 'com.android.application'
           }
 
           android {
-
               namespace 'com.example.filmfilter'
-
               compileSdk 35
 
               defaultConfig {
-
                   applicationId 'com.example.filmfilter'
-
                   minSdk 24
-
                   targetSdk 35
-
-                  versionCode 2
-
-                  versionName '0.2'
+                  versionCode 1
+                  versionName '1.0'
               }
           }
-
           EOF
 
-
-      # ==================================================
-      # 10. AndroidManifest.xml
-      # ==================================================
-
           cat > app/src/main/AndroidManifest.xml <<'EOF'
-
-          <manifest
-              xmlns:android="http://schemas.android.com/apk/res/android">
+          <manifest xmlns:android="http://schemas.android.com/apk/res/android">
 
               <application
                   android:theme="@style/AppTheme"
-                  android:label="FilmFilter"
-                  android:allowBackup="true">
+                  android:label="FilmFilter">
 
                   <activity
                       android:name=".MainActivity"
                       android:exported="true">
 
                       <intent-filter>
-
-                          <action
-                              android:name="android.intent.action.MAIN" />
-
-                          <category
-                              android:name="android.intent.category.LAUNCHER" />
-
+                          <action android:name="android.intent.action.MAIN" />
+                          <category android:name="android.intent.category.LAUNCHER" />
                       </intent-filter>
 
                   </activity>
@@ -187,406 +111,103 @@ jobs:
               </application>
 
           </manifest>
-
           EOF
 
-
-      # ==================================================
-      # 11. 앱 테마
-      # ==================================================
-
           cat > app/src/main/res/values/styles.xml <<'EOF'
-
           <resources>
-
               <style
                   name="AppTheme"
                   parent="android:style/Theme.Material.Light.NoActionBar">
 
                   <item name="android:fontFamily">sans</item>
-
-                  <item name="android:colorAccent">
-                      #222222
-                  </item>
-
-                  <item name="android:navigationBarColor">
-                      #000000
-                  </item>
-
-                  <item name="android:statusBarColor">
-                      #000000
-                  </item>
-
-                  <item name="android:windowLightStatusBar">
-                      false
-                  </item>
+                  <item name="android:colorAccent">#333333</item>
+                  <item name="android:navigationBarColor">#000000</item>
+                  <item name="android:statusBarColor">#000000</item>
 
               </style>
-
           </resources>
-
           EOF
 
-
-      # ==================================================
-      # 12. Kodak Warm Faded LUT 생성
-      # ==================================================
-
-          python3 <<'PY'
-
-          import numpy as np
-
-          N = 33
-
-          def tone(x):
-
-              y = x ** 0.96
-
-              y = 0.055 + 0.89 * y
-
-              y = 1.0 - (1.0 - y) ** 1.04
-
-              return np.clip(y, 0, 1)
-
-
-          with open(
-              "app/src/main/assets/kodak_warm_faded_33.cube",
-              "w",
-              encoding="utf-8"
-          ) as f:
-
-              f.write(
-                  'TITLE "Kodak Warm Faded - Soft Green Film"\n'
-              )
-
-              f.write(
-                  'LUT_3D_SIZE 33\n'
-              )
-
-              f.write(
-                  'DOMAIN_MIN 0.0 0.0 0.0\n'
-              )
-
-              f.write(
-                  'DOMAIN_MAX 1.0 1.0 1.0\n'
-              )
-
-
-              for b in np.linspace(0, 1, N):
-
-                  for g in np.linspace(0, 1, N):
-
-                      for r in np.linspace(0, 1, N):
-
-
-                          rr = tone(r)
-
-                          gg = tone(g)
-
-                          bb = tone(b)
-
-
-                          # 밝기
-
-                          lum = (
-                              0.2126 * rr
-                              + 0.7152 * gg
-                              + 0.0722 * bb
-                          )
-
-
-                          # 채도 약간 감소
-
-                          sat = 0.90 - 0.07 * lum
-
-
-                          rr = (
-                              lum
-                              + (rr - lum) * sat
-                          )
-
-                          gg = (
-                              lum
-                              + (gg - lum) * sat
-                          )
-
-                          bb = (
-                              lum
-                              + (bb - lum) * sat
-                          )
-
-
-                          # 따뜻한 하이라이트
-
-                          hi = max(
-                              0.0,
-                              (lum - 0.42) / 0.58
-                          )
-
-                          rr += 0.018 * hi
-
-                          gg += 0.010 * hi
-
-                          bb -= 0.020 * hi
-
-
-                          # 그림자
-
-                          sh = max(
-                              0.0,
-                              (0.48 - lum) / 0.48
-                          )
-
-                          rr -= 0.010 * sh
-
-                          gg += 0.006 * sh
-
-                          bb += 0.012 * sh
-
-
-                          # 중간톤
-
-                          mid = max(
-                              0.0,
-                              1.0
-                              - abs(lum - 0.52) / 0.52
-                          )
-
-                          gg += 0.008 * mid
-
-                          bb -= 0.006 * mid
-
-
-                          # 피부톤 보호
-
-                          skin = np.clip(
-                              (rr - bb) * 1.7,
-                              0,
-                              1
-                          )
-
-                          skin *= np.clip(
-                              (rr + gg) / 2,
-                              0,
-                              1
-                          )
-
-
-                          rr += 0.012 * skin
-
-                          gg += 0.002 * skin
-
-                          bb -= 0.008 * skin
-
-
-                          f.write(
-                              f"{np.clip(rr,0,1):.6f} "
-                              f"{np.clip(gg,0,1):.6f} "
-                              f"{np.clip(bb,0,1):.6f}\n"
-                          )
-
-          PY
-
-
-      # ==================================================
-      # 13. MainActivity.java
-      # ==================================================
-
           cat > app/src/main/java/com/example/filmfilter/MainActivity.java <<'EOF'
-
           package com.example.filmfilter;
 
-
           import android.app.Activity;
-
           import android.content.Intent;
-
           import android.graphics.Bitmap;
-
           import android.graphics.BitmapFactory;
-
           import android.graphics.Color;
-
           import android.net.Uri;
-
           import android.os.Bundle;
-
           import android.view.Gravity;
-
           import android.widget.Button;
-
           import android.widget.ImageView;
-
           import android.widget.LinearLayout;
-
           import android.widget.TextView;
-
-
-          import java.io.BufferedReader;
 
           import java.io.InputStream;
 
-          import java.io.InputStreamReader;
-
-          import java.util.ArrayList;
-
-
           public class MainActivity extends Activity {
 
-
-              private static final int PICK_IMAGE = 1001;
-
+              private static final int PICK_IMAGE = 100;
 
               private ImageView imageView;
-
-              private Bitmap originalBitmap;
-
-              private Lut3D lut;
-
+              private Bitmap original;
 
               @Override
-
-              protected void onCreate(
-                  Bundle savedInstanceState
-              ) {
-
+              protected void onCreate(Bundle savedInstanceState) {
                   super.onCreate(savedInstanceState);
-
-
-                  createUI();
-
-
-                  try {
-
-                      lut = Lut3D.load(
-                          getAssets(),
-                          "kodak_warm_faded_33.cube"
-                      );
-
-                  } catch (Exception e) {
-
-                      e.printStackTrace();
-
-                  }
-
+                  makeUI();
               }
 
+              private void makeUI() {
 
-              // ==========================================
-              // UI
-              // ==========================================
+                  LinearLayout root = new LinearLayout(this);
+                  root.setOrientation(LinearLayout.VERTICAL);
+                  root.setPadding(24, 24, 24, 24);
 
-              private void createUI() {
-
-
-                  LinearLayout root =
-                      new LinearLayout(this);
-
-
-                  root.setOrientation(
-                      LinearLayout.VERTICAL
-                  );
-
-
-                  root.setPadding(
-                      24,
-                      24,
-                      24,
-                      24
-                  );
-
-
-                  TextView title =
-                      new TextView(this);
-
-
-                  title.setText(
-                      "FilmFilter\nKodak Warm Faded"
-                  );
-
-
-                  title.setTextSize(22);
-
-
-                  title.setGravity(
-                      Gravity.CENTER
-                  );
-
+                  TextView title = new TextView(this);
+                  title.setText("FilmFilter");
+                  title.setTextSize(26);
+                  title.setGravity(Gravity.CENTER);
 
                   root.addView(
                       title,
-                      new LinearLayout.LayoutParams(
-                          -1,
-                          -2
-                      )
+                      new LinearLayout.LayoutParams(-1, 70)
                   );
 
-
-                  imageView =
-                      new ImageView(this);
-
-
+                  imageView = new ImageView(this);
                   imageView.setBackgroundColor(
-                      Color.rgb(
-                          235,
-                          235,
-                          235
-                      )
+                      Color.rgb(235, 235, 235)
                   );
-
-
                   imageView.setScaleType(
                       ImageView.ScaleType.FIT_CENTER
                   );
 
-
-                  LinearLayout.LayoutParams
-                      imageParams =
+                  LinearLayout.LayoutParams imageParams =
                       new LinearLayout.LayoutParams(
                           -1,
                           0,
                           1
                       );
 
+                  imageParams.topMargin = 15;
+                  imageParams.bottomMargin = 15;
 
-                  imageParams.topMargin = 20;
+                  root.addView(imageView, imageParams);
 
-                  imageParams.bottomMargin = 20;
-
-
-                  root.addView(
-                      imageView,
-                      imageParams
-                  );
-
-
-                  LinearLayout buttons =
-                      new LinearLayout(this);
-
-
+                  LinearLayout buttons = new LinearLayout(this);
                   buttons.setOrientation(
                       LinearLayout.HORIZONTAL
                   );
 
-
-                  // 사진 선택
-
-                  Button selectButton =
-                      new Button(this);
-
-
-                  selectButton.setText(
-                      "사진 선택"
+                  Button select = new Button(this);
+                  select.setText("사진 선택");
+                  select.setOnClickListener(
+                      v -> selectPhoto()
                   );
-
-
-                  selectButton.setOnClickListener(
-                      v -> chooseImage()
-                  );
-
 
                   buttons.addView(
-                      selectButton,
+                      select,
                       new LinearLayout.LayoutParams(
                           0,
                           -2,
@@ -594,32 +215,20 @@ jobs:
                       )
                   );
 
-
-                  // 필터 적용
-
-                  Button filterButton =
-                      new Button(this);
-
-
-                  filterButton.setText(
-                      "필터 적용"
+                  Button filter = new Button(this);
+                  filter.setText("필터 적용");
+                  filter.setOnClickListener(
+                      v -> applyFilm()
                   );
-
-
-                  filterButton.setOnClickListener(
-                      v -> applyFilter()
-                  );
-
 
                   buttons.addView(
-                      filterButton,
+                      filter,
                       new LinearLayout.LayoutParams(
                           0,
                           -2,
                           1
                       )
                   );
-
 
                   root.addView(
                       buttons,
@@ -629,45 +238,27 @@ jobs:
                       )
                   );
 
-
                   setContentView(root);
-
               }
 
+              private void selectPhoto() {
 
-              // ==========================================
-              // 사진 선택
-              // ==========================================
-
-              private void chooseImage() {
-
-
-                  Intent intent =
-                      new Intent(
-                          Intent.ACTION_OPEN_DOCUMENT
-                      );
-
-
-                  intent.setType(
-                      "image/*"
+                  Intent intent = new Intent(
+                      Intent.ACTION_OPEN_DOCUMENT
                   );
 
-
+                  intent.setType("image/*");
                   intent.addCategory(
                       Intent.CATEGORY_OPENABLE
                   );
-
 
                   startActivityForResult(
                       intent,
                       PICK_IMAGE
                   );
-
               }
 
-
               @Override
-
               protected void onActivityResult(
                   int requestCode,
                   int resultCode,
@@ -680,157 +271,87 @@ jobs:
                       data
                   );
 
-
                   if (
-                      requestCode == PICK_IMAGE
-                      &&
-                      resultCode == RESULT_OK
-                      &&
-                      data != null
-                      &&
+                      requestCode == PICK_IMAGE &&
+                      resultCode == RESULT_OK &&
+                      data != null &&
                       data.getData() != null
                   ) {
 
-
-                      Uri uri =
-                          data.getData();
-
-
                       try {
 
+                          Uri uri = data.getData();
 
                           InputStream input =
                               getContentResolver()
                                   .openInputStream(uri);
 
-
                           Bitmap bitmap =
-                              BitmapFactory.decodeStream(
-                                  input
-                              );
-
+                              BitmapFactory.decodeStream(input);
 
                           input.close();
 
-
-                          originalBitmap =
-                              resizeBitmap(
-                                  bitmap,
-                                  1600
-                              );
-
-
-                          imageView.setImageBitmap(
-                              originalBitmap
+                          original = resize(
+                              bitmap,
+                              1600
                           );
 
+                          imageView.setImageBitmap(
+                              original
+                          );
 
                       } catch (Exception e) {
-
                           e.printStackTrace();
-
                       }
-
                   }
-
               }
 
-
-              // ==========================================
-              // 이미지 크기 조절
-              // ==========================================
-
-              private Bitmap resizeBitmap(
+              private Bitmap resize(
                   Bitmap bitmap,
-                  int maxSize
+                  int max
               ) {
 
-
-                  if (bitmap == null)
+                  if (bitmap == null) {
                       return null;
-
-
-                  int width =
-                      bitmap.getWidth();
-
-
-                  int height =
-                      bitmap.getHeight();
-
-
-                  int largest =
-                      Math.max(
-                          width,
-                          height
-                      );
-
-
-                  if (
-                      largest <= maxSize
-                  ) {
-
-                      return bitmap;
-
                   }
 
+                  int w = bitmap.getWidth();
+                  int h = bitmap.getHeight();
+
+                  int longest = Math.max(w, h);
+
+                  if (longest <= max) {
+                      return bitmap;
+                  }
 
                   float scale =
-                      maxSize /
-                      (float) largest;
-
+                      max / (float) longest;
 
                   return Bitmap.createScaledBitmap(
                       bitmap,
-                      Math.round(
-                          width * scale
-                      ),
-                      Math.round(
-                          height * scale
-                      ),
+                      Math.round(w * scale),
+                      Math.round(h * scale),
                       true
                   );
-
               }
 
+              private void applyFilm() {
 
-              // ==========================================
-              // 필터 적용
-              // ==========================================
-
-              private void applyFilter() {
-
-
-                  if (
-                      originalBitmap == null
-                      ||
-                      lut == null
-                  ) {
-
+                  if (original == null) {
                       return;
-
                   }
 
-
                   Bitmap result =
-                      originalBitmap.copy(
+                      original.copy(
                           Bitmap.Config.ARGB_8888,
                           true
                       );
 
-
-                  int width =
-                      result.getWidth();
-
-
-                  int height =
-                      result.getHeight();
-
+                  int width = result.getWidth();
+                  int height = result.getHeight();
 
                   int[] pixels =
-                      new int[
-                          width * height
-                      ];
-
+                      new int[width * height];
 
                   result.getPixels(
                       pixels,
@@ -842,61 +363,29 @@ jobs:
                       height
                   );
 
+                  for (int i = 0; i < pixels.length; i++) {
 
-                  for (
-                      int i = 0;
-                      i < pixels.length;
-                      i++
-                  ) {
+                      int pixel = pixels[i];
 
+                      float r =
+                          Color.red(pixel) / 255f;
 
-                      int pixel =
-                          pixels[i];
+                      float g =
+                          Color.green(pixel) / 255f;
 
+                      float b =
+                          Color.blue(pixel) / 255f;
 
-                      int r =
-                          Color.red(pixel);
+                      float[] rgb =
+                          filmLook(r, g, b);
 
-
-                      int g =
-                          Color.green(pixel);
-
-
-                      int b =
-                          Color.blue(pixel);
-
-
-                      float[] output =
-                          lut.sample(
-                              r / 255f,
-                              g / 255f,
-                              b / 255f
-                          );
-
-
-                      pixels[i] =
-                          Color.argb(
-
-                              Color.alpha(
-                                  pixel
-                              ),
-
-                              Math.round(
-                                  output[0] * 255
-                              ),
-
-                              Math.round(
-                                  output[1] * 255
-                              ),
-
-                              Math.round(
-                                  output[2] * 255
-                              )
-
-                          );
-
+                      pixels[i] = Color.argb(
+                          Color.alpha(pixel),
+                          Math.round(rgb[0] * 255),
+                          Math.round(rgb[1] * 255),
+                          Math.round(rgb[2] * 255)
+                      );
                   }
-
 
                   result.setPixels(
                       pixels,
@@ -908,493 +397,112 @@ jobs:
                       height
                   );
 
-
-                  imageView.setImageBitmap(
-                      result
-                  );
-
+                  imageView.setImageBitmap(result);
               }
 
-
-              // ==========================================
-              // 3D LUT
-              // ==========================================
-
-              static class Lut3D {
-
-
-                  int size;
-
-
-                  float[] data;
-
-
-                  static Lut3D load(
-                      android.content.res.AssetManager assets,
-                      String filename
-                  ) throws Exception {
-
-
-                      Lut3D lut =
-                          new Lut3D();
-
-
-                      ArrayList<Float> values =
-                          new ArrayList<>();
-
-
-                      BufferedReader reader =
-                          new BufferedReader(
-                              new InputStreamReader(
-                                  assets.open(
-                                      filename
-                                  )
-                              )
-                          );
-
-
-                      String line;
-
-
-                      while (
-                          (line =
-                              reader.readLine())
-                          != null
-                      ) {
-
-
-                          line =
-                              line.trim();
-
-
-                          if (
-                              line.isEmpty()
-                              ||
-                              line.startsWith("#")
-                              ||
-                              line.startsWith("TITLE")
-                              ||
-                              line.startsWith("DOMAIN")
-                          ) {
-
-                              continue;
-
-                          }
-
-
-                          if (
-                              line.startsWith(
-                                  "LUT_3D_SIZE"
-                              )
-                          ) {
-
-
-                              lut.size =
-                                  Integer.parseInt(
-                                      line.split(
-                                          "\\s+"
-                                      )[1]
-                                  );
-
-
-                              continue;
-
-                          }
-
-
-                          String[] parts =
-                              line.split(
-                                  "\\s+"
-                              );
-
-
-                          if (
-                              parts.length >= 3
-                          ) {
-
-
-                              values.add(
-                                  Float.parseFloat(
-                                      parts[0]
-                                  )
-                              );
-
-
-                              values.add(
-                                  Float.parseFloat(
-                                      parts[1]
-                                  )
-                              );
-
-
-                              values.add(
-                                  Float.parseFloat(
-                                      parts[2]
-                                  )
-                              );
-
-                          }
-
-                      }
-
-
-                      reader.close();
-
-
-                      lut.data =
-                          new float[
-                              values.size()
-                          ];
-
-
-                      for (
-                          int i = 0;
-                          i < values.size();
-                          i++
-                      ) {
-
-
-                          lut.data[i] =
-                              values.get(i);
-
-                      }
-
-
-                      return lut;
-
-                  }
-
-
-                  // ====================================
-                  // LUT 보간
-                  // ====================================
-
-                  float[] sample(
-                      float r,
-                      float g,
-                      float b
-                  ) {
-
-
-                      float x =
-                          r * (size - 1);
-
-
-                      float y =
-                          g * (size - 1);
-
-
-                      float z =
-                          b * (size - 1);
-
-
-                      int x0 =
-                          Math.max(
-                              0,
-                              Math.min(
-                                  size - 1,
-                                  (int)Math.floor(x)
-                              )
-                          );
-
-
-                      int y0 =
-                          Math.max(
-                              0,
-                              Math.min(
-                                  size - 1,
-                                  (int)Math.floor(y)
-                              )
-                          );
-
-
-                      int z0 =
-                          Math.max(
-                              0,
-                              Math.min(
-                                  size - 1,
-                                  (int)Math.floor(z)
-                              )
-                          );
-
-
-                      int x1 =
+              private float[] filmLook(
+                  float r,
+                  float g,
+                  float b
+              ) {
+
+                  // Kodak 계열의 부드러운 톤
+                  r = (float)Math.pow(r, 0.96);
+                  g = (float)Math.pow(g, 0.96);
+                  b = (float)Math.pow(b, 0.96);
+
+                  r = 0.055f + 0.89f * r;
+                  g = 0.055f + 0.89f * g;
+                  b = 0.055f + 0.89f * b;
+
+                  // 밝기
+                  float lum =
+                      0.2126f * r +
+                      0.7152f * g +
+                      0.0722f * b;
+
+                  // 살짝 바랜 채도
+                  float saturation =
+                      0.91f - 0.06f * lum;
+
+                  r = lum + (r - lum) * saturation;
+                  g = lum + (g - lum) * saturation;
+                  b = lum + (b - lum) * saturation;
+
+                  // 따뜻한 하이라이트
+                  float highlight =
+                      Math.max(
+                          0f,
+                          (lum - 0.42f) / 0.58f
+                      );
+
+                  r += 0.018f * highlight;
+                  g += 0.010f * highlight;
+                  b -= 0.020f * highlight;
+
+                  // 약간의 필름 그린
+                  float mid =
+                      Math.max(
+                          0f,
+                          1f -
+                          Math.abs(lum - 0.52f)
+                          / 0.52f
+                      );
+
+                  g += 0.008f * mid;
+                  b -= 0.006f * mid;
+
+                  // 피부 보호
+                  float skin =
+                      Math.max(
+                          0f,
                           Math.min(
-                              size - 1,
-                              x0 + 1
-                          );
-
-
-                      int y1 =
-                          Math.min(
-                              size - 1,
-                              y0 + 1
-                          );
-
-
-                      int z1 =
-                          Math.min(
-                              size - 1,
-                              z0 + 1
-                          );
-
-
-                      float fx =
-                          x - x0;
-
-
-                      float fy =
-                          y - y0;
-
-
-                      float fz =
-                          z - z0;
-
-
-                      float[] c000 =
-                          get(
-                              x0,
-                              y0,
-                              z0
-                          );
-
-
-                      float[] c100 =
-                          get(
-                              x1,
-                              y0,
-                              z0
-                          );
-
-
-                      float[] c010 =
-                          get(
-                              x0,
-                              y1,
-                              z0
-                          );
-
-
-                      float[] c110 =
-                          get(
-                              x1,
-                              y1,
-                              z0
-                          );
-
-
-                      float[] c001 =
-                          get(
-                              x0,
-                              y0,
-                              z1
-                          );
-
-
-                      float[] c101 =
-                          get(
-                              x1,
-                              y0,
-                              z1
-                          );
-
-
-                      float[] c011 =
-                          get(
-                              x0,
-                              y1,
-                              z1
-                          );
-
-
-                      float[] c111 =
-                          get(
-                              x1,
-                              y1,
-                              z1
-                          );
-
-
-                      float[] output =
-                          new float[3];
-
-
-                      for (
-                          int i = 0;
-                          i < 3;
-                          i++
-                      ) {
-
-
-                          float c00 =
-                              c000[i]
-                              +
-                              (
-                                  c100[i]
-                                  -
-                                  c000[i]
-                              )
-                              * fx;
-
-
-                          float c10 =
-                              c010[i]
-                              +
-                              (
-                                  c110[i]
-                                  -
-                                  c010[i]
-                              )
-                              * fx;
-
-
-                          float c01 =
-                              c001[i]
-                              +
-                              (
-                                  c101[i]
-                                  -
-                                  c001[i]
-                              )
-                              * fx;
-
-
-                          float c11 =
-                              c011[i]
-                              +
-                              (
-                                  c111[i]
-                                  -
-                                  c011[i]
-                              )
-                              * fx;
-
-
-                          float c0 =
-                              c00
-                              +
-                              (
-                                  c10 - c00
-                              )
-                              * fy;
-
-
-                          float c1 =
-                              c01
-                              +
-                              (
-                                  c11 - c01
-                              )
-                              * fy;
-
-
-                          output[i] =
-                              Math.max(
-                                  0,
-                                  Math.min(
-                                      1,
-                                      c0
-                                      +
-                                      (
-                                          c1 - c0
-                                      )
-                                      * fz
-                                  )
-                              );
-
-                      }
-
-
-                      return output;
-
-                  }
-
-
-                  // ====================================
-                  // LUT 데이터 가져오기
-                  // ====================================
-
-                  float[] get(
-                      int r,
-                      int g,
-                      int b
-                  ) {
-
-
-                      int index =
-                          (
-                              (
-                                  b * size
-                                  + g
-                              )
-                              * size
-                              + r
+                              1f,
+                              (r - b) * 1.7f
                           )
-                          * 3;
+                      );
 
+                  r += 0.012f * skin;
+                  b -= 0.008f * skin;
 
-                      return new float[]{
-
-                          data[index],
-
-                          data[index + 1],
-
-                          data[index + 2]
-
-                      };
-
-                  }
-
+                  return new float[]{
+                      clamp(r),
+                      clamp(g),
+                      clamp(b)
+                  };
               }
 
-          }
+              private float clamp(float value) {
 
+                  return Math.max(
+                      0f,
+                      Math.min(
+                          1f,
+                          value
+                      )
+                  );
+              }
+          }
           EOF
 
-
-      # ==================================================
-      # 14. APK 빌드
-      # ==================================================
-
-      - name: APK 빌드
-        run: |
-
-          gradle assembleDebug --stacktrace
-
-
-      # ==================================================
-      # 15. APK가 실제 생성됐는지 확인
-      # ==================================================
-
-      - name: APK 파일 확인
+      - name: Build APK
         shell: bash
         run: |
+          set -e
+          gradle assembleDebug --stacktrace
 
-          echo "===================================="
-          echo "생성된 APK 검색"
-          echo "===================================="
-
+      - name: Check APK
+        shell: bash
+        run: |
+          set -e
+          echo "Generated APK files:"
           find . -type f -name "*.apk" -print
 
-          echo "===================================="
+          test -f app/build/outputs/apk/debug/app-debug.apk
 
-          if ! find . -type f -name "*.apk" | grep -q ".apk"; then
-              echo "APK가 생성되지 않았습니다."
-              exit 1
-          fi
-
-
-      # ==================================================
-      # 16. APK 업로드
-      # ==================================================
-
-      - name: APK 업로드
+      - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
-
           name: FilmFilter-debug-apk
-
-          path: |
-            app/build/outputs/apk/debug/*.apk
-
+          path: app/build/outputs/apk/debug/app-debug.apk
           if-no-files-found: error
