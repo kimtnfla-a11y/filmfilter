@@ -1,19 +1,32 @@
 name: Build FilmFilter APK
 
 on:
-  workflow_dispatch:
   push:
     branches:
       - main
+  workflow_dispatch:
 
 permissions:
   contents: read
 
 jobs:
   build:
+    name: Build APK
     runs-on: ubuntu-latest
 
     steps:
+
+      - name: Set up Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.10'
+
       - name: Create Android project
         shell: bash
         run: |
@@ -79,6 +92,7 @@ jobs:
           EOF
 
           cat > app/src/main/AndroidManifest.xml <<'EOF'
+          <?xml version="1.0" encoding="utf-8"?>
           <manifest xmlns:android="http://schemas.android.com/apk/res/android">
 
               <application
@@ -111,10 +125,9 @@ jobs:
                   parent="android:style/Theme.Material.NoActionBar">
 
                   <item name="android:fontFamily">sans</item>
-                  <item name="android:colorAccent">#ffffff</item>
-                  <item name="android:navigationBarColor">#171717</item>
-                  <item name="android:statusBarColor">#171717</item>
                   <item name="android:windowLightStatusBar">false</item>
+                  <item name="android:statusBarColor">#171717</item>
+                  <item name="android:navigationBarColor">#171717</item>
 
               </style>
 
@@ -145,158 +158,4 @@ jobs:
 
           public class MainActivity extends Activity {
 
-              private ImageView image;
-              private Bitmap original;
-
-              private SeekBar bright;
-              private SeekBar contrast;
-              private SeekBar sat;
-
-              private TextView empty;
-
-              private int dp(float x) {
-                  return (int)(
-                      x * getResources()
-                          .getDisplayMetrics()
-                          .density + 0.5f
-                  );
-              }
-
-              @Override
-              protected void onCreate(Bundle b) {
-                  super.onCreate(b);
-                  build();
-              }
-
-              private TextView tv(String s, int sp) {
-
-                  TextView t = new TextView(this);
-
-                  t.setText(s);
-                  t.setTextColor(Color.LTGRAY);
-                  t.setTextSize(sp);
-
-                  return t;
-              }
-
-              private Button btn(String s) {
-
-                  Button b = new Button(this);
-
-                  b.setText(s);
-
-                  return b;
-              }
-
-              private void build() {
-
-                  LinearLayout root =
-                      new LinearLayout(this);
-
-                  root.setOrientation(
-                      LinearLayout.VERTICAL
-                  );
-
-                  root.setPadding(
-                      dp(16),
-                      dp(10),
-                      dp(16),
-                      dp(10)
-                  );
-
-                  root.setBackgroundColor(
-                      Color.rgb(23,23,23)
-                  );
-
-                  TextView title =
-                      tv("FILM",24);
-
-                  title.setTextColor(
-                      Color.WHITE
-                  );
-
-                  root.addView(
-                      title,
-                      new LinearLayout.LayoutParams(
-                          -1,
-                          dp(40)
-                      )
-                  );
-
-                  FrameLayout frame =
-                      new FrameLayout(this);
-
-                  frame.setBackgroundColor(
-                      Color.rgb(36,36,36)
-                  );
-
-                  image =
-                      new ImageView(this);
-
-                  image.setScaleType(
-                      ImageView.ScaleType.FIT_CENTER
-                  );
-
-                  frame.addView(
-                      image,
-                      new FrameLayout.LayoutParams(
-                          -1,
-                          -1
-                      )
-                  );
-
-                  empty =
-                      tv("사진을 선택해줘",14);
-
-                  empty.setGravity(
-                      Gravity.CENTER
-                  );
-
-                  frame.addView(
-                      empty,
-                      new FrameLayout.LayoutParams(
-                          -1,
-                          -1
-                      )
-                  );
-
-                  root.addView(
-                      frame,
-                      new LinearLayout.LayoutParams(
-                          -1,
-                          0,
-                          1
-                      )
-                  );
-
-                  Button pick =
-                      btn("＋ 사진 불러오기");
-
-                  root.addView(
-                      pick,
-                      new LinearLayout.LayoutParams(
-                          -1,
-                          dp(52)
-                      )
-                  );
-
-                  pick.setOnClickListener(
-                      v -> pick()
-                  );
-
-                  LinearLayout presets =
-                      new LinearLayout(this);
-
-                  presets.setOrientation(
-                      LinearLayout.HORIZONTAL
-                  );
-
-                  String[] ps = {
-                      "Original",
-                      "Warm 35",
-                      "Soft Film",
-                      "Gold",
-                      "Flash Night"
-                  };
-
-                  for (String p : ps)
+              private
