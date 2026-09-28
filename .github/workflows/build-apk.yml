@@ -1,0 +1,373 @@
+name: Build FilmFilter APK
+
+on:
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Create project
+        run: |
+          mkdir -p app/src/main/java/com/example/filmfilter
+          mkdir -p app/src/main/res/values
+
+          cat > settings.gradle <<'EOF'
+          pluginManagement {
+              repositories {
+                  google()
+                  mavenCentral()
+                  gradlePluginPortal()
+              }
+          }
+          dependencyResolutionManagement {
+              repositoriesMode.set(RepositoriesMode.FAIL_ON_PROJECT_REPOS)
+              repositories {
+                  google()
+                  mavenCentral()
+              }
+          }
+          rootProject.name="FilmFilter"
+          include(":app")
+          EOF
+
+          cat > build.gradle <<'EOF'
+          plugins {
+              id 'com.android.application' version '8.7.3' apply false
+          }
+          EOF
+
+          cat > gradle.properties <<'EOF'
+          android.useAndroidX=true
+          android.nonTransitiveRClass=true
+          EOF
+
+          cat > app/build.gradle <<'EOF'
+          plugins {
+              id 'com.android.application'
+          }
+
+          android {
+              namespace 'com.example.filmfilter'
+              compileSdk 35
+
+              defaultConfig {
+                  applicationId 'com.example.filmfilter'
+                  minSdk 23
+                  targetSdk 35
+                  versionCode 1
+                  versionName '1.0'
+              }
+          }
+          EOF
+
+          cat > app/src/main/AndroidManifest.xml <<'EOF'
+          <manifest xmlns:android="http://schemas.android.com/apk/res/android">
+              <application
+                  android:theme="@style/AppTheme"
+                  android:label="FILM">
+
+                  <activity
+                      android:name=".MainActivity"
+                      android:screenOrientation="portrait"
+                      android:exported="true">
+
+                      <intent-filter>
+                          <action android:name="android.intent.action.MAIN"/>
+                          <category android:name="android.intent.category.LAUNCHER"/>
+                      </intent-filter>
+
+                  </activity>
+              </application>
+          </manifest>
+          EOF
+
+          cat > app/src/main/res/values/styles.xml <<'EOF'
+          <resources>
+              <style name="AppTheme"
+                  parent="android:style/Theme.Material.NoActionBar">
+                  <item name="android:fontFamily">sans</item>
+                  <item name="android:colorAccent">#ffffff</item>
+                  <item name="android:navigationBarColor">#171717</item>
+                  <item name="android:statusBarColor">#171717</item>
+              </style>
+          </resources>
+          EOF
+
+          cat > app/src/main/java/com/example/filmfilter/MainActivity.java <<'EOF'
+          package com.example.filmfilter;
+
+          import android.app.*;
+          import android.os.*;
+          import android.content.*;
+          import android.graphics.*;
+          import android.provider.MediaStore;
+          import android.view.*;
+          import android.widget.*;
+
+          public class MainActivity extends Activity {
+
+              ImageView image;
+              Bitmap original;
+              SeekBar bright, contrast, sat;
+              TextView empty;
+
+              int dp(float x) {
+                  return (int)(x * getResources()
+                      .getDisplayMetrics().density + .5f);
+              }
+
+              public void onCreate(Bundle b) {
+                  super.onCreate(b);
+                  build();
+              }
+
+              TextView tv(String s, int sp) {
+                  TextView t = new TextView(this);
+                  t.setText(s);
+                  t.setTextColor(Color.LTGRAY);
+                  t.setTextSize(sp);
+                  return t;
+              }
+
+              Button btn(String s) {
+                  Button b = new Button(this);
+                  b.setText(s);
+                  return b;
+              }
+
+              void build() {
+                  LinearLayout root = new LinearLayout(this);
+                  root.setOrientation(LinearLayout.VERTICAL);
+                  root.setPadding(dp(16),dp(10),dp(16),dp(10));
+                  root.setBackgroundColor(Color.rgb(23,23,23));
+
+                  TextView title = tv("FILM",24);
+                  title.setTextColor(Color.WHITE);
+                  root.addView(title,
+                      new LinearLayout.LayoutParams(-1,dp(40)));
+
+                  FrameLayout frame = new FrameLayout(this);
+                  frame.setBackgroundColor(Color.rgb(36,36,36));
+
+                  image = new ImageView(this);
+                  image.setScaleType(ImageView.ScaleType.FIT_CENTER);
+
+                  frame.addView(image,
+                      new FrameLayout.LayoutParams(-1,-1));
+
+                  empty = tv("사진을 선택해줘",14);
+                  empty.setGravity(Gravity.CENTER);
+
+                  frame.addView(empty,
+                      new FrameLayout.LayoutParams(-1,-1));
+
+                  root.addView(frame,
+                      new LinearLayout.LayoutParams(-1,0,1));
+
+                  Button pick = btn("＋ 사진 불러오기");
+                  root.addView(pick,
+                      new LinearLayout.LayoutParams(-1,dp(52)));
+
+                  pick.setOnClickListener(v -> pick());
+
+                  LinearLayout presets = new LinearLayout(this);
+                  presets.setOrientation(LinearLayout.HORIZONTAL);
+
+                  String[] ps = {
+                      "Original",
+                      "Warm 35",
+                      "Soft Film",
+                      "Gold",
+                      "Flash Night"
+                  };
+
+                  for(String p : ps) {
+                      Button x = btn(p);
+                      presets.addView(x,
+                          new LinearLayout.LayoutParams(0,dp(52),1));
+                      x.setOnClickListener(v -> applyPreset(p));
+                  }
+
+                  root.addView(presets);
+
+                  bright = bar(100);
+                  contrast = bar(100);
+                  sat = bar(100);
+
+                  root.addView(row("밝기",bright));
+                  root.addView(row("대비",contrast));
+                  root.addView(row("채도",sat));
+
+                  Button save = btn("사진 저장");
+                  root.addView(save,
+                      new LinearLayout.LayoutParams(-1,dp(52)));
+
+                  save.setOnClickListener(v -> save());
+
+                  setContentView(root);
+              }
+
+              SeekBar bar(int val) {
+                  SeekBar s = new SeekBar(this);
+                  s.setMax(200);
+                  s.setProgress(val);
+
+                  s.setOnSeekBarChangeListener(
+                      new SeekBar.OnSeekBarChangeListener() {
+                          public void onProgressChanged(
+                              SeekBar x,int p,boolean f) {
+                              apply();
+                          }
+
+                          public void onStartTrackingTouch(SeekBar x) {}
+                          public void onStopTrackingTouch(SeekBar x) {}
+                      });
+
+                  return s;
+              }
+
+              LinearLayout row(String name, SeekBar s) {
+                  LinearLayout r = new LinearLayout(this);
+                  r.setGravity(Gravity.CENTER_VERTICAL);
+
+                  TextView t = tv(name,13);
+
+                  r.addView(t,
+                      new LinearLayout.LayoutParams(dp(55),dp(45)));
+
+                  r.addView(s,
+                      new LinearLayout.LayoutParams(0,dp(45),1));
+
+                  return r;
+              }
+
+              void pick() {
+                  Intent i = new Intent(
+                      Intent.ACTION_OPEN_DOCUMENT);
+
+                  i.setType("image/*");
+                  i.addCategory(Intent.CATEGORY_OPENABLE);
+
+                  startActivityForResult(i,9);
+              }
+
+              protected void onActivityResult(
+                  int r,int c,Intent d) {
+
+                  super.onActivityResult(r,c,d);
+
+                  if(r == 9 && c == RESULT_OK) {
+                      try {
+                          original =
+                              MediaStore.Images.Media.getBitmap(
+                                  getContentResolver(),
+                                  d.getData());
+
+                          empty.setVisibility(View.GONE);
+                          apply();
+
+                      } catch(Exception e) {}
+                  }
+              }
+
+              void applyPreset(String p) {
+
+                  int b=100,c=100,s=100;
+
+                  if(p.equals("Warm 35")) {
+                      b=104; c=92; s=108;
+                  }
+
+                  else if(p.equals("Soft Film")) {
+                      b=103; c=86; s=92;
+                  }
+
+                  else if(p.equals("Gold")) {
+                      b=106; c=94; s=105;
+                  }
+
+                  else if(p.equals("Flash Night")) {
+                      b=88; c=125; s=118;
+                  }
+
+                  bright.setProgress(b);
+                  contrast.setProgress(c);
+                  sat.setProgress(s);
+              }
+
+              void apply() {
+
+                  if(original == null) return;
+
+                  float c = contrast.getProgress()/100f;
+                  float s = sat.getProgress()/100f;
+
+                  ColorMatrix m = new ColorMatrix();
+                  m.setSaturation(s);
+
+                  float tr = 128*(1-c);
+
+                  ColorMatrix cm = new ColorMatrix(
+                      new float[]{
+                          c,0,0,0,tr,
+                          0,c,0,0,tr,
+                          0,0,c,0,tr,
+                          0,0,0,1,0
+                      });
+
+                  m.postConcat(cm);
+
+                  image.setColorFilter(
+                      new ColorMatrixColorFilter(m));
+
+                  image.setImageBitmap(original);
+              }
+
+              void save() {
+
+                  if(original == null) {
+                      Toast.makeText(
+                          this,
+                          "먼저 사진을 선택해줘.",
+                          Toast.LENGTH_SHORT
+                      ).show();
+                      return;
+                  }
+
+                  MediaStore.Images.Media.insertImage(
+                      getContentResolver(),
+                      original,
+                      "film-photo",
+                      "FILM"
+                  );
+
+                  Toast.makeText(
+                      this,
+                      "사진을 저장했어.",
+                      Toast.LENGTH_SHORT
+                  ).show();
+              }
+          }
+          EOF
+
+      - name: Set up Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.10'
+
+      - name: Build APK
+        run: gradle --no-daemon assembleDebug
+
+      - name: Upload APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: FilmFilter-APK
+          path: app/build/outputs/apk/debug/app-debug.apk
