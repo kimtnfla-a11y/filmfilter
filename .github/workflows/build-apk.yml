@@ -14,18 +14,16 @@ jobs:
       - name: 저장소 가져오기
         uses: actions/checkout@v4
 
-      - name: Java 설정
+      - name: Java 17 설정
         uses: actions/setup-java@v4
         with:
           distribution: temurin
           java-version: '17'
 
-      - name: Android SDK 확인
-        run: |
-          echo "ANDROID_HOME=$ANDROID_HOME"
-          sdkmanager --version
-          yes | sdkmanager --licenses || true
-          sdkmanager "platforms;android-35" "build-tools;35.0.0"
+      - name: Android SDK 설정
+        uses: android-actions/setup-android@v4
+        with:
+          packages: 'platforms;android-35 build-tools;35.0.0'
 
       - name: Gradle 설정
         uses: gradle/actions/setup-gradle@v4
