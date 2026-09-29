@@ -15,7 +15,7 @@ jobs:
         uses: actions/checkout@v4
 
       - name: Setup Java
-        uses: actions/setup-java@v4
+        uses: actions/setup-java@v5
         with:
           distribution: temurin
           java-version: '17'
@@ -37,7 +37,6 @@ jobs:
 
           mkdir -p app/src/main/java/com/example/filmfilter
           mkdir -p app/src/main/res/values
-          mkdir -p app/src/main/res/drawable
 
           cat > settings.gradle <<'EOF'
           pluginManagement {
@@ -69,6 +68,7 @@ jobs:
           cat > gradle.properties <<'EOF'
           android.useAndroidX=true
           android.nonTransitiveRClass=true
+          org.gradle.jvmargs=-Xmx2048m
           EOF
 
           cat > app/build.gradle <<'EOF'
@@ -84,8 +84,8 @@ jobs:
                   applicationId 'com.example.filmfilter'
                   minSdk 24
                   targetSdk 35
-                  versionCode 1
-                  versionName '1.0'
+                  versionCode 2
+                  versionName '2.0'
               }
           }
           EOF
@@ -95,10 +95,13 @@ jobs:
 
               <application
                   android:theme="@style/AppTheme"
-                  android:label="FilmFilter">
+                  android:label="FilmFilter"
+                  android:allowBackup="true"
+                  android:supportsRtl="true">
 
                   <activity
                       android:name=".MainActivity"
+                      android:screenOrientation="portrait"
                       android:exported="true">
 
                       <intent-filter>
@@ -115,16 +118,19 @@ jobs:
 
           cat > app/src/main/res/values/styles.xml <<'EOF'
           <resources>
+
               <style
                   name="AppTheme"
                   parent="android:style/Theme.Material.Light.NoActionBar">
 
                   <item name="android:fontFamily">sans</item>
+                  <item name="android:windowLightStatusBar">false</item>
+                  <item name="android:statusBarColor">#111111</item>
+                  <item name="android:navigationBarColor">#111111</item>
                   <item name="android:colorAccent">#333333</item>
-                  <item name="android:navigationBarColor">#000000</item>
-                  <item name="android:statusBarColor">#000000</item>
 
               </style>
+
           </resources>
           EOF
 
@@ -138,42 +144,109 @@ jobs:
           import android.graphics.Color;
           import android.net.Uri;
           import android.os.Bundle;
+          import android.provider.MediaStore;
           import android.view.Gravity;
+          import android.view.View;
           import android.widget.Button;
+          import android.widget.HorizontalScrollView;
+          import android.widget.ImageButton;
           import android.widget.ImageView;
           import android.widget.LinearLayout;
+          import android.widget.SeekBar;
           import android.widget.TextView;
+          import android.widget.Toast;
 
           import java.io.InputStream;
+          import java.util.ArrayList;
+          import java.util.List;
 
           public class MainActivity extends Activity {
 
               private static final int PICK_IMAGE = 100;
+              private static final int TAKE_PHOTO = 101;
 
               private ImageView imageView;
-              private Bitmap original;
+              private TextView filterName;
+              private TextView statusText;
+              private SeekBar intensityBar;
+
+              private Bitmap originalBitmap;
+              private Bitmap currentBitmap;
+
+              private int selectedFilter = 0;
+              private float intensity = 0.70f;
+
+              private final String[] FILTER_NAMES = {
+                  "Original",
+                  "Warm",
+                  "Gold",
+                  "Soft",
+                  "Classic",
+                  "Faded",
+                  "Cool",
+                  "Green",
+                  "Retro",
+                  "Dream",
+                  "B&W",
+                  "Mono Fade"
+              };
 
               @Override
               protected void onCreate(Bundle savedInstanceState) {
                   super.onCreate(savedInstanceState);
-                  makeUI();
+                  buildUI();
               }
 
-              private void makeUI() {
+              private int dp(float value) {
+                  return (int)(value * getResources().getDisplayMetrics().density + 0.5f);
+              }
+
+              private TextView text(
+                  String value,
+                  float size
+              ) {
+                  TextView t = new TextView(this);
+                  t.setText(value);
+                  t.setTextSize(size);
+                  t.setTextColor(Color.rgb(30, 30, 30));
+                  return t;
+              }
+
+              private void buildUI() {
 
                   LinearLayout root = new LinearLayout(this);
                   root.setOrientation(LinearLayout.VERTICAL);
-                  root.setPadding(24, 24, 24, 24);
+                  root.setBackgroundColor(Color.WHITE);
 
-                  TextView title = new TextView(this);
-                  title.setText("FilmFilter");
-                  title.setTextSize(26);
-                  title.setGravity(Gravity.CENTER);
+                  LinearLayout top = new LinearLayout(this);
+                  top.setGravity(Gravity.CENTER_VERTICAL);
+                  top.setPadding(dp(18), dp(10), dp(18), dp(6));
 
-                  root.addView(
+                  TextView title = text("FilmFilter", 22);
+                  title.setTypeface(null, android.graphics.Typeface.BOLD);
+
+                  top.addView(
                       title,
-                      new LinearLayout.LayoutParams(-1, 70)
+                      new LinearLayout.LayoutParams(
+                          0,
+                          dp(55),
+                          1
+                      )
                   );
+
+                  Button save = new Button(this);
+                  save.setText("저장");
+                  save.setOnClickListener(v -> savePhoto());
+
+                  top.addView(
+                      save,
+                      new LinearLayout.LayoutParams(
+                          dp(75),
+                          dp(50)
+                      )
+                  );
+
+                  root.addView(top);
 
                   imageView = new ImageView(this);
                   imageView.setBackgroundColor(
@@ -190,51 +263,242 @@ jobs:
                           1
                       );
 
-                  imageParams.topMargin = 15;
-                  imageParams.bottomMargin = 15;
+                  imageParams.setMargins(
+                      dp(12),
+                      dp(4),
+                      dp(12),
+                      dp(4)
+                  );
 
                   root.addView(imageView, imageParams);
 
-                  LinearLayout buttons = new LinearLayout(this);
-                  buttons.setOrientation(
-                      LinearLayout.HORIZONTAL
+                  filterName = text(
+                      "Original",
+                      18
                   );
+                  filterName.setGravity(Gravity.CENTER);
 
-                  Button select = new Button(this);
-                  select.setText("사진 선택");
-                  select.setOnClickListener(
-                      v -> selectPhoto()
-                  );
-
-                  buttons.addView(
-                      select,
+                  root.addView(
+                      filterName,
                       new LinearLayout.LayoutParams(
-                          0,
-                          -2,
-                          1
+                          -1,
+                          dp(42)
                       )
                   );
 
-                  Button filter = new Button(this);
-                  filter.setText("필터 적용");
-                  filter.setOnClickListener(
-                      v -> applyFilm()
+                  intensityBar = new SeekBar(this);
+                  intensityBar.setMax(100);
+                  intensityBar.setProgress(70);
+
+                  intensityBar.setOnSeekBarChangeListener(
+                      new SeekBar.OnSeekBarChangeListener() {
+
+                          @Override
+                          public void onProgressChanged(
+                              SeekBar seekBar,
+                              int progress,
+                              boolean fromUser
+                          ) {
+
+                              intensity =
+                                  progress / 100f;
+
+                              if (
+                                  fromUser &&
+                                  originalBitmap != null
+                              ) {
+                                  applySelectedFilter();
+                              }
+                          }
+
+                          @Override
+                          public void onStartTrackingTouch(
+                              SeekBar seekBar
+                          ) {}
+
+                          @Override
+                          public void onStopTrackingTouch(
+                              SeekBar seekBar
+                          ) {}
+                      }
                   );
 
-                  buttons.addView(
-                      filter,
+                  LinearLayout intensityRow =
+                      new LinearLayout(this);
+
+                  intensityRow.setGravity(
+                      Gravity.CENTER_VERTICAL
+                  );
+
+                  TextView intensityLabel =
+                      text("강도", 14);
+
+                  intensityRow.addView(
+                      intensityLabel,
+                      new LinearLayout.LayoutParams(
+                          dp(45),
+                          -2
+                      )
+                  );
+
+                  intensityRow.addView(
+                      intensityBar,
                       new LinearLayout.LayoutParams(
                           0,
-                          -2,
+                          dp(45),
                           1
                       )
                   );
 
                   root.addView(
-                      buttons,
+                      intensityRow,
                       new LinearLayout.LayoutParams(
                           -1,
-                          -2
+                          dp(50)
+                      )
+                  );
+
+                  HorizontalScrollView scroll =
+                      new HorizontalScrollView(this);
+
+                  LinearLayout filters =
+                      new LinearLayout(this);
+
+                  filters.setOrientation(
+                      LinearLayout.HORIZONTAL
+                  );
+
+                  filters.setPadding(
+                      dp(10),
+                      dp(5),
+                      dp(10),
+                      dp(5)
+                  );
+
+                  for (
+                      int i = 0;
+                      i < FILTER_NAMES.length;
+                      i++
+                  ) {
+
+                      final int index = i;
+
+                      Button b = new Button(this);
+                      b.setText(FILTER_NAMES[i]);
+                      b.setTextSize(12);
+
+                      b.setOnClickListener(
+                          v -> {
+
+                              selectedFilter = index;
+
+                              filterName.setText(
+                                  FILTER_NAMES[index]
+                              );
+
+                              applySelectedFilter();
+                          }
+                      );
+
+                      filters.addView(
+                          b,
+                          new LinearLayout.LayoutParams(
+                              dp(95),
+                              dp(50)
+                          )
+                      );
+                  }
+
+                  scroll.addView(filters);
+
+                  root.addView(
+                      scroll,
+                      new LinearLayout.LayoutParams(
+                          -1,
+                          dp(62)
+                      )
+                  );
+
+                  LinearLayout bottom =
+                      new LinearLayout(this);
+
+                  bottom.setPadding(
+                      dp(10),
+                      dp(4),
+                      dp(10),
+                      dp(10)
+                  );
+
+                  Button camera =
+                      new Button(this);
+
+                  camera.setText("📷 카메라");
+
+                  camera.setOnClickListener(
+                      v -> takePhoto()
+                  );
+
+                  bottom.addView(
+                      camera,
+                      new LinearLayout.LayoutParams(
+                          0,
+                          dp(55),
+                          1
+                      )
+                  );
+
+                  Button gallery =
+                      new Button(this);
+
+                  gallery.setText("🖼 갤러리");
+
+                  gallery.setOnClickListener(
+                      v -> selectPhoto()
+                  );
+
+                  bottom.addView(
+                      gallery,
+                      new LinearLayout.LayoutParams(
+                          0,
+                          dp(55),
+                          1
+                      )
+                  );
+
+                  Button original =
+                      new Button(this);
+
+                  original.setText("↩ 원본");
+
+                  original.setOnClickListener(
+                      v -> restoreOriginal()
+                  );
+
+                  bottom.addView(
+                      original,
+                      new LinearLayout.LayoutParams(
+                          0,
+                          dp(55),
+                          1
+                      )
+                  );
+
+                  root.addView(bottom);
+
+                  statusText = text(
+                      "사진을 선택하거나 카메라로 촬영하세요",
+                      12
+                  );
+
+                  statusText.setGravity(
+                      Gravity.CENTER
+                  );
+
+                  root.addView(
+                      statusText,
+                      new LinearLayout.LayoutParams(
+                          -1,
+                          dp(28)
                       )
                   );
 
@@ -243,11 +507,13 @@ jobs:
 
               private void selectPhoto() {
 
-                  Intent intent = new Intent(
-                      Intent.ACTION_OPEN_DOCUMENT
-                  );
+                  Intent intent =
+                      new Intent(
+                          Intent.ACTION_OPEN_DOCUMENT
+                      );
 
                   intent.setType("image/*");
+
                   intent.addCategory(
                       Intent.CATEGORY_OPENABLE
                   );
@@ -256,6 +522,34 @@ jobs:
                       intent,
                       PICK_IMAGE
                   );
+              }
+
+              private void takePhoto() {
+
+                  Intent intent =
+                      new Intent(
+                          MediaStore.ACTION_IMAGE_CAPTURE
+                      );
+
+                  if (
+                      intent.resolveActivity(
+                          getPackageManager()
+                      ) != null
+                  ) {
+
+                      startActivityForResult(
+                          intent,
+                          TAKE_PHOTO
+                      );
+
+                  } else {
+
+                      Toast.makeText(
+                          this,
+                          "카메라를 사용할 수 없습니다.",
+                          Toast.LENGTH_SHORT
+                      ).show();
+                  }
               }
 
               @Override
@@ -272,37 +566,89 @@ jobs:
                   );
 
                   if (
-                      requestCode == PICK_IMAGE &&
-                      resultCode == RESULT_OK &&
-                      data != null &&
-                      data.getData() != null
+                      resultCode != RESULT_OK ||
+                      data == null
                   ) {
+                      return;
+                  }
 
-                      try {
+                  try {
 
-                          Uri uri = data.getData();
+                      Bitmap bitmap = null;
+
+                      if (
+                          requestCode == PICK_IMAGE &&
+                          data.getData() != null
+                      ) {
+
+                          Uri uri =
+                              data.getData();
 
                           InputStream input =
                               getContentResolver()
                                   .openInputStream(uri);
 
-                          Bitmap bitmap =
-                              BitmapFactory.decodeStream(input);
+                          bitmap =
+                              BitmapFactory.decodeStream(
+                                  input
+                              );
 
                           input.close();
 
-                          original = resize(
-                              bitmap,
-                              1600
+                      } else if (
+                          requestCode == TAKE_PHOTO
+                      ) {
+
+                          Bundle extras =
+                              data.getExtras();
+
+                          if (extras != null) {
+                              bitmap =
+                                  (Bitmap)
+                                  extras.get(
+                                      "data"
+                                  );
+                          }
+                      }
+
+                      if (bitmap != null) {
+
+                          originalBitmap =
+                              resize(
+                                  bitmap,
+                                  1600
+                              );
+
+                          currentBitmap =
+                              originalBitmap;
+
+                          selectedFilter = 0;
+                          intensity = 0.70f;
+
+                          intensityBar.setProgress(70);
+
+                          filterName.setText(
+                              "Original"
                           );
 
                           imageView.setImageBitmap(
-                              original
+                              originalBitmap
                           );
 
-                      } catch (Exception e) {
-                          e.printStackTrace();
+                          statusText.setText(
+                              "사진 준비 완료"
+                          );
                       }
+
+                  } catch (Exception e) {
+
+                      e.printStackTrace();
+
+                      Toast.makeText(
+                          this,
+                          "사진을 불러오지 못했습니다.",
+                          Toast.LENGTH_SHORT
+                      ).show();
                   }
               }
 
@@ -318,7 +664,8 @@ jobs:
                   int w = bitmap.getWidth();
                   int h = bitmap.getHeight();
 
-                  int longest = Math.max(w, h);
+                  int longest =
+                      Math.max(w, h);
 
                   if (longest <= max) {
                       return bitmap;
@@ -335,23 +682,72 @@ jobs:
                   );
               }
 
-              private void applyFilm() {
+              private void restoreOriginal() {
 
-                  if (original == null) {
+                  if (originalBitmap == null) {
+                      return;
+                  }
+
+                  selectedFilter = 0;
+
+                  filterName.setText(
+                      "Original"
+                  );
+
+                  intensityBar.setProgress(70);
+
+                  currentBitmap =
+                      originalBitmap;
+
+                  imageView.setImageBitmap(
+                      originalBitmap
+                  );
+
+                  statusText.setText(
+                      "원본으로 되돌렸습니다"
+                  );
+              }
+
+              private void applySelectedFilter() {
+
+                  if (originalBitmap == null) {
+                      Toast.makeText(
+                          this,
+                          "먼저 사진을 선택하세요.",
+                          Toast.LENGTH_SHORT
+                      ).show();
+
+                      return;
+                  }
+
+                  if (selectedFilter == 0) {
+
+                      currentBitmap =
+                          originalBitmap;
+
+                      imageView.setImageBitmap(
+                          originalBitmap
+                      );
+
                       return;
                   }
 
                   Bitmap result =
-                      original.copy(
+                      originalBitmap.copy(
                           Bitmap.Config.ARGB_8888,
                           true
                       );
 
-                  int width = result.getWidth();
-                  int height = result.getHeight();
+                  int width =
+                      result.getWidth();
+
+                  int height =
+                      result.getHeight();
 
                   int[] pixels =
-                      new int[width * height];
+                      new int[
+                          width * height
+                      ];
 
                   result.getPixels(
                       pixels,
@@ -363,28 +759,61 @@ jobs:
                       height
                   );
 
-                  for (int i = 0; i < pixels.length; i++) {
+                  for (int i = 0;
+                       i < pixels.length;
+                       i++) {
 
-                      int pixel = pixels[i];
+                      int pixel =
+                          pixels[i];
 
                       float r =
-                          Color.red(pixel) / 255f;
+                          Color.red(pixel)
+                          / 255f;
 
                       float g =
-                          Color.green(pixel) / 255f;
+                          Color.green(pixel)
+                          / 255f;
 
                       float b =
-                          Color.blue(pixel) / 255f;
+                          Color.blue(pixel)
+                          / 255f;
 
-                      float[] rgb =
-                          filmLook(r, g, b);
+                      float[] filtered =
+                          filter(
+                              r,
+                              g,
+                              b,
+                              selectedFilter
+                          );
 
-                      pixels[i] = Color.argb(
-                          Color.alpha(pixel),
-                          Math.round(rgb[0] * 255),
-                          Math.round(rgb[1] * 255),
-                          Math.round(rgb[2] * 255)
-                      );
+                      float amount =
+                          intensity;
+
+                      r = r +
+                          (filtered[0] - r)
+                          * amount;
+
+                      g = g +
+                          (filtered[1] - g)
+                          * amount;
+
+                      b = b +
+                          (filtered[2] - b)
+                          * amount;
+
+                      pixels[i] =
+                          Color.argb(
+                              Color.alpha(pixel),
+                              Math.round(
+                                  clamp(r) * 255
+                              ),
+                              Math.round(
+                                  clamp(g) * 255
+                              ),
+                              Math.round(
+                                  clamp(b) * 255
+                              )
+                          );
                   }
 
                   result.setPixels(
@@ -397,112 +826,57 @@ jobs:
                       height
                   );
 
-                  imageView.setImageBitmap(result);
+                  currentBitmap =
+                      result;
+
+                  imageView.setImageBitmap(
+                      result
+                  );
               }
 
-              private float[] filmLook(
+              private float[] filter(
                   float r,
                   float g,
-                  float b
+                  float b,
+                  int type
               ) {
 
-                  // Kodak 계열의 부드러운 톤
-                  r = (float)Math.pow(r, 0.96);
-                  g = (float)Math.pow(g, 0.96);
-                  b = (float)Math.pow(b, 0.96);
-
-                  r = 0.055f + 0.89f * r;
-                  g = 0.055f + 0.89f * g;
-                  b = 0.055f + 0.89f * b;
-
-                  // 밝기
                   float lum =
                       0.2126f * r +
                       0.7152f * g +
                       0.0722f * b;
 
-                  // 살짝 바랜 채도
-                  float saturation =
-                      0.91f - 0.06f * lum;
+                  float nr = r;
+                  float ng = g;
+                  float nb = b;
 
-                  r = lum + (r - lum) * saturation;
-                  g = lum + (g - lum) * saturation;
-                  b = lum + (b - lum) * saturation;
+                  switch (type) {
 
-                  // 따뜻한 하이라이트
-                  float highlight =
-                      Math.max(
-                          0f,
-                          (lum - 0.42f) / 0.58f
-                      );
+                      case 1:
+                          // Warm
+                          nr = r * 1.04f + 0.025f;
+                          ng = g * 1.01f + 0.005f;
+                          nb = b * 0.94f;
+                          break;
 
-                  r += 0.018f * highlight;
-                  g += 0.010f * highlight;
-                  b -= 0.020f * highlight;
+                      case 2:
+                          // Gold
+                          nr = r * 1.07f + 0.025f;
+                          ng = g * 1.02f;
+                          nb = b * 0.87f;
+                          break;
 
-                  // 약간의 필름 그린
-                  float mid =
-                      Math.max(
-                          0f,
-                          1f -
-                          Math.abs(lum - 0.52f)
-                          / 0.52f
-                      );
+                      case 3:
+                          // Soft
+                          nr = lum +
+                              (r - lum) * 0.82f;
+                          ng = lum +
+                              (g - lum) * 0.82f;
+                          nb = lum +
+                              (b - lum) * 0.82f;
 
-                  g += 0.008f * mid;
-                  b -= 0.006f * mid;
+                          nr = 0.035f +
+                              nr * 0.93f;
 
-                  // 피부 보호
-                  float skin =
-                      Math.max(
-                          0f,
-                          Math.min(
-                              1f,
-                              (r - b) * 1.7f
-                          )
-                      );
-
-                  r += 0.012f * skin;
-                  b -= 0.008f * skin;
-
-                  return new float[]{
-                      clamp(r),
-                      clamp(g),
-                      clamp(b)
-                  };
-              }
-
-              private float clamp(float value) {
-
-                  return Math.max(
-                      0f,
-                      Math.min(
-                          1f,
-                          value
-                      )
-                  );
-              }
-          }
-          EOF
-
-      - name: Build APK
-        shell: bash
-        run: |
-          set -e
-          gradle assembleDebug --stacktrace
-
-      - name: Check APK
-        shell: bash
-        run: |
-          set -e
-          echo "Generated APK files:"
-          find . -type f -name "*.apk" -print
-
-          test -f app/build/outputs/apk/debug/app-debug.apk
-
-      - name: Upload APK
-        uses: actions/upload-artifact@v4
-        with:
-          name: FilmFilter-debug-apk
-          path: app/build/outputs/apk/debug/app-debug.apk
-          if-no-files-found: error
+                          ng = 0.035f +
+                             
