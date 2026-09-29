@@ -3,7 +3,8 @@ name: FilmFilter APK
 on:
   workflow_dispatch:
   push:
-    branches: [main]
+    branches:
+      - main
 
 jobs:
   build:
@@ -19,559 +20,64 @@ jobs:
           distribution: temurin
           java-version: "17"
 
-      - name: Setup Android
+      - name: Setup Android SDK
         uses: android-actions/setup-android@v4
 
       - name: Setup Gradle
         uses: gradle/actions/setup-gradle@v4
         with:
-          gradle-version: "8.9"
+          gradle-version: "8.11.1"
 
-      - name: Create project
+      - name: Extract FilmFilter v4
         shell: bash
         run: |
           set -e
 
-          mkdir -p app/src/main/java/com/example/filmfilter
-          mkdir -p app/src/main/res/values
+          rm -rf /tmp/filmfilter-v4
+          mkdir -p /tmp/filmfilter-v4
 
-          cat > settings.gradle <<'EOF'
-          pluginManagement {
-              repositories {
-                  google()
-                  mavenCentral()
-                  gradlePluginPortal()
-              }
-          }
+          unzip -q FilmFilter_Pro_v4.zip -d /tmp/filmfilter-v4
 
-          dependencyResolutionManagement {
-              repositoriesMode.set(RepositoriesMode.FAIL_ON_PROJECT_REPOS)
-              repositories {
-                  google()
-                  mavenCentral()
-              }
-          }
+          ROOT=$(find /tmp/filmfilter-v4 -name settings.gradle -type f | head -n 1 | xargs dirname)
 
-          rootProject.name = "FilmFilter"
-          include(":app")
-          EOF
+          if [ -z "$ROOT" ]; then
+            echo "ERROR: settings.gradle not found in ZIP"
+            exit 1
+          fi
 
-          cat > build.gradle <<'EOF'
-          plugins {
-              id 'com.android.application' version '8.7.3' apply false
-          }
-          EOF
+          echo "Using project: $ROOT"
 
-          cat > gradle.properties <<'EOF'
-          android.useAndroidX=true
-          org.gradle.jvmargs=-Xmx2048m
-          EOF
+          cp -a "$ROOT"/. .
 
-          cat > app/build.gradle <<'EOF'
-          plugins {
-              id 'com.android.application'
-          }
+          echo "Project files:"
+          ls -la
 
-          android {
-              namespace 'com.example.filmfilter'
-              compileSdk 35
-
-              defaultConfig {
-                  applicationId 'com.example.filmfilter'
-                  minSdk 24
-                  targetSdk 35
-                  versionCode 3
-                  versionName '3.0'
-              }
-          }
-          EOF
-
-          cat > app/src/main/AndroidManifest.xml <<'EOF'
-          <manifest xmlns:android="http://schemas.android.com/apk/res/android">
-
-              <application
-                  android:theme="@style/AppTheme"
-                  android:label="FilmFilter"
-                  android:allowBackup="true"
-                  android:supportsRtl="true">
-
-                  <activity
-                      android:name=".MainActivity"
-                      android:screenOrientation="portrait"
-                      android:exported="true">
-
-                      <intent-filter>
-                          <action android:name="android.intent.action.MAIN"/>
-                          <category android:name="android.intent.category.LAUNCHER"/>
-                      </intent-filter>
-
-                  </activity>
-
-              </application>
-
-          </manifest>
-          EOF
-
-          cat > app/src/main/res/values/styles.xml <<'EOF'
-          <resources>
-
-              <style name="AppTheme"
-                  parent="android:style/Theme.Material.Light.NoActionBar">
-
-                  <item name="android:fontFamily">sans</item>
-                  <item name="android:windowLightStatusBar">false</item>
-                  <item name="android:statusBarColor">#08090D</item>
-                  <item name="android:navigationBarColor">#08090D</item>
-                  <item name="android:windowActionModeOverlay">true</item>
-
-              </style>
-
-          </resources>
-          EOF
-
-          cat > app/src/main/java/com/example/filmfilter/MainActivity.java <<'EOF'
-          package com.example.filmfilter;
-
-          import android.app.Activity;
-          import android.content.Intent;
-          import android.graphics.Bitmap;
-          import android.graphics.BitmapFactory;
-          import android.graphics.Canvas;
-          import android.graphics.Color;
-          import android.graphics.Paint;
-          import android.graphics.drawable.GradientDrawable;
-          import android.net.Uri;
-          import android.os.Bundle;
-          import android.provider.MediaStore;
-          import android.view.Gravity;
-          import android.view.View;
-          import android.widget.Button;
-          import android.widget.HorizontalScrollView;
-          import android.widget.ImageView;
-          import android.widget.LinearLayout;
-          import android.widget.SeekBar;
-          import android.widget.TextView;
-          import android.widget.Toast;
-
-          import java.io.InputStream;
-
-          public class MainActivity extends Activity {
-
-              static final int PICK = 10;
-              static final int CAMERA = 11;
-
-              ImageView photo;
-              TextView name;
-              SeekBar strength;
-
-              Bitmap original;
-              Bitmap preview;
-
-              int filter = 0;
-              float amount = .75f;
-
-              final String[] names = {
-                  "Original","Warm","Gold","Soft","Classic","Faded",
-                  "Cool","Green","Retro","Dream","B&W","Mono"
-              };
-
-              int dp(float n) {
-                  return (int)(n * getResources()
-                          .getDisplayMetrics().density + .5f);
-              }
-
-              TextView label(String s, float size) {
-                  TextView t = new TextView(this);
-                  t.setText(s);
-                  t.setTextSize(size);
-                  t.setTextColor(Color.WHITE);
-                  return t;
-              }
-
-              GradientDrawable glass(float radius) {
-                  GradientDrawable g = new GradientDrawable();
-                  g.setColor(Color.argb(48,255,255,255));
-                  g.setCornerRadius(dp(radius));
-                  g.setStroke(dp(1),Color.argb(75,255,255,255));
-                  return g;
-              }
-
-              Button glassButton(String text) {
-                  Button b = new Button(this);
-                  b.setText(text);
-                  b.setTextColor(Color.WHITE);
-                  b.setTextSize(13);
-                  b.setAllCaps(false);
-                  b.setBackground(glass(24));
-                  b.setPadding(dp(4),0,dp(4),0);
-                  return b;
-              }
-
-              @Override
-              protected void onCreate(Bundle b) {
-                  super.onCreate(b);
-                  makeUI();
-              }
-
-              void makeUI() {
-
-                  LinearLayout root = new LinearLayout(this);
-                  root.setOrientation(LinearLayout.VERTICAL);
-                  root.setPadding(dp(12),dp(10),dp(12),dp(10));
-                  root.setBackgroundColor(Color.rgb(9,10,15));
-
-                  LinearLayout bar = new LinearLayout(this);
-                  bar.setGravity(Gravity.CENTER_VERTICAL);
-
-                  TextView title = label("FilmFilter",22);
-                  title.setTypeface(null,1);
-
-                  bar.addView(title,new LinearLayout.LayoutParams(
-                          0,dp(48),1));
-
-                  Button save = glassButton("SAVE");
-                  save.setOnClickListener(v -> save());
-
-                  bar.addView(save,new LinearLayout.LayoutParams(
-                          dp(78),dp(46)));
-
-                  root.addView(bar);
-
-                  photo = new ImageView(this);
-                  photo.setScaleType(ImageView.ScaleType.FIT_CENTER);
-                  photo.setBackground(glass(28));
-
-                  LinearLayout.LayoutParams pp =
-                          new LinearLayout.LayoutParams(-1,0,1);
-                  pp.setMargins(0,dp(8),0,dp(8));
-                  root.addView(photo,pp);
-
-                  name = label("Original",17);
-                  name.setGravity(Gravity.CENTER);
-                  root.addView(name,new LinearLayout.LayoutParams(
-                          -1,dp(34)));
-
-                  LinearLayout control = new LinearLayout(this);
-                  control.setGravity(Gravity.CENTER_VERTICAL);
-                  control.setBackground(glass(22));
-                  control.setPadding(dp(8),0,dp(8),0);
-
-                  TextView strengthText = label("INTENSITY",10);
-                  control.addView(strengthText,
-                          new LinearLayout.LayoutParams(dp(65),dp(45)));
-
-                  strength = new SeekBar(this);
-                  strength.setMax(100);
-                  strength.setProgress(75);
-
-                  strength.setOnSeekBarChangeListener(
-                          new SeekBar.OnSeekBarChangeListener() {
-                              public void onProgressChanged(
-                                      SeekBar s,int p,boolean user) {
-                                  if(user && original != null) {
-                                      amount=p/100f;
-                                      apply();
-                                  }
-                              }
-                              public void onStartTrackingTouch(SeekBar s){}
-                              public void onStopTrackingTouch(SeekBar s){}
-                          });
-
-                  control.addView(strength,
-                          new LinearLayout.LayoutParams(0,dp(45),1));
-
-                  root.addView(control,new LinearLayout.LayoutParams(
-                          -1,dp(50)));
-
-                  HorizontalScrollView scroll =
-                          new HorizontalScrollView(this);
-                  scroll.setHorizontalScrollBarEnabled(false);
-
-                  LinearLayout filters = new LinearLayout(this);
-                  filters.setPadding(dp(4),dp(8),dp(4),dp(8));
-
-                  for(int i=0;i<names.length;i++) {
-                      final int x=i;
-                      Button f=glassButton(names[i]);
-                      f.setOnClickListener(v -> {
-                          filter=x;
-                          name.setText(names[x]);
-                          apply();
-                      });
-                      filters.addView(f,new LinearLayout.LayoutParams(
-                              dp(88),dp(46)));
-                  }
-
-                  scroll.addView(filters);
-                  root.addView(scroll,new LinearLayout.LayoutParams(
-                          -1,dp(62)));
-
-                  LinearLayout bottom = new LinearLayout(this);
-                  bottom.setGravity(Gravity.CENTER);
-                  bottom.setPadding(0,dp(4),0,0);
-
-                  Button camera=glassButton("◉  Camera");
-                  camera.setOnClickListener(v -> camera());
-
-                  Button gallery=glassButton("▣  Gallery");
-                  gallery.setOnClickListener(v -> gallery());
-
-                  Button reset=glassButton("↶  Reset");
-                  reset.setOnClickListener(v -> reset());
-
-                  bottom.addView(camera,new LinearLayout.LayoutParams(
-                          0,dp(52),1));
-                  bottom.addView(gallery,new LinearLayout.LayoutParams(
-                          0,dp(52),1));
-                  bottom.addView(reset,new LinearLayout.LayoutParams(
-                          0,dp(52),1));
-
-                  root.addView(bottom);
-
-                  setContentView(root);
-              }
-
-              void gallery() {
-                  Intent i=new Intent(Intent.ACTION_OPEN_DOCUMENT);
-                  i.setType("image/*");
-                  i.addCategory(Intent.CATEGORY_OPENABLE);
-                  startActivityForResult(i,PICK);
-              }
-
-              void camera() {
-                  Intent i=new Intent(MediaStore.ACTION_IMAGE_CAPTURE);
-                  if(i.resolveActivity(getPackageManager())!=null)
-                      startActivityForResult(i,CAMERA);
-                  else
-                      Toast.makeText(this,
-                              "Camera unavailable",
-                              Toast.LENGTH_SHORT).show();
-              }
-
-              @Override
-              protected void onActivityResult(
-                      int request,int result,Intent data) {
-
-                  super.onActivityResult(request,result,data);
-
-                  if(result!=RESULT_OK || data==null) return;
-
-                  try {
-                      Bitmap b=null;
-
-                      if(request==PICK && data.getData()!=null) {
-                          Uri u=data.getData();
-                          InputStream in=getContentResolver()
-                                  .openInputStream(u);
-                          b=BitmapFactory.decodeStream(in);
-                          in.close();
-                      }
-
-                      if(request==CAMERA && data.getExtras()!=null)
-                          b=(Bitmap)data.getExtras().get("data");
-
-                      if(b!=null) {
-                          original=small(b,900);
-                          filter=0;
-                          amount=.75f;
-                          strength.setProgress(75);
-                          name.setText("Original");
-                          preview=original;
-                          photo.setImageBitmap(original);
-                      }
-
-                  } catch(Exception e) {
-                      Toast.makeText(this,
-                              "사진을 불러오지 못했습니다.",
-                              Toast.LENGTH_SHORT).show();
-                  }
-              }
-
-              Bitmap small(Bitmap b,int max) {
-                  int w=b.getWidth(),h=b.getHeight();
-                  int longest=Math.max(w,h);
-
-                  if(longest<=max) return b;
-
-                  float s=max/(float)longest;
-
-                  return Bitmap.createScaledBitmap(
-                          b,Math.round(w*s),Math.round(h*s),true);
-              }
-
-              void reset() {
-                  if(original==null) return;
-                  filter=0;
-                  name.setText("Original");
-                  preview=original;
-                  photo.setImageBitmap(original);
-              }
-
-              void apply() {
-
-                  if(original==null) return;
-
-                  if(filter==0) {
-                      preview=original;
-                      photo.setImageBitmap(original);
-                      return;
-                  }
-
-                  Bitmap out=original.copy(
-                          Bitmap.Config.ARGB_8888,true);
-
-                  int w=out.getWidth();
-                  int h=out.getHeight();
-
-                  int[] px=new int[w*h];
-
-                  out.getPixels(px,0,w,0,0,w,h);
-
-                  for(int i=0;i<px.length;i++) {
-
-                      int c=px[i];
-
-                      float r=Color.red(c)/255f;
-                      float g=Color.green(c)/255f;
-                      float b=Color.blue(c)/255f;
-
-                      float[] f=color(r,g,b,filter);
-
-                      r += (f[0]-r)*amount;
-                      g += (f[1]-g)*amount;
-                      b += (f[2]-b)*amount;
-
-                      px[i]=Color.rgb(
-                              clamp(r),
-                              clamp(g),
-                              clamp(b));
-                  }
-
-                  out.setPixels(px,0,w,0,0,w,h);
-
-                  preview=out;
-                  photo.setImageBitmap(out);
-              }
-
-              int clamp(float x) {
-                  return Math.max(0,Math.min(255,(int)(x*255)));
-              }
-
-              float[] color(float r,float g,float b,int f) {
-
-                  float l=.2126f*r+.7152f*g+.0722f*b;
-
-                  switch(f) {
-
-                      case 1:
-                          return new float[]{
-                                  r*1.04f+.02f,
-                                  g*1.01f,
-                                  b*.94f};
-
-                      case 2:
-                          return new float[]{
-                                  r*1.08f+.02f,
-                                  g*1.02f,
-                                  b*.87f};
-
-                      case 3:
-                          return new float[]{
-                                  .04f+(l+(r-l)*.78f)*.94f,
-                                  .04f+(l+(g-l)*.78f)*.94f,
-                                  .05f+(l+(b-l)*.78f)*.94f};
-
-                      case 4:
-                          return new float[]{
-                                  (float)Math.pow(r,.96),
-                                  (float)Math.pow(g,.98),
-                                  (float)Math.pow(b,1.02)};
-
-                      case 5:
-                          return new float[]{
-                                  .08f+r*.84f,
-                                  .08f+g*.84f,
-                                  .09f+b*.84f};
-
-                      case 6:
-                          return new float[]{r*.93f,g*.99f,b*1.08f};
-
-                      case 7:
-                          return new float[]{r*.96f,g*1.07f,b*.98f};
-
-                      case 8:
-                          return new float[]{
-                                  .5f+(r-.5f)*1.12f,
-                                  .5f+(g-.5f)*1.08f,
-                                  .5f+(b-.5f)*1.03f};
-
-                      case 9:
-                          return new float[]{
-                                  r*.98f+.035f,
-                                  g*.98f+.025f,
-                                  b*1.04f+.035f};
-
-                      case 10:
-                          return new float[]{l,l,l};
-
-                      case 11:
-                          float m=.08f+l*.82f;
-                          return new float[]{m,m,m};
-
-                      default:
-                          return new float[]{r,g,b};
-                  }
-              }
-
-              void save() {
-
-                  if(preview==null) {
-                      Toast.makeText(this,
-                              "먼저 사진을 선택하세요.",
-                              Toast.LENGTH_SHORT).show();
-                      return;
-                  }
-
-                  try {
-
-                      String title="FilmFilter_"+
-                              System.currentTimeMillis();
-
-                      String uri=MediaStore.Images.Media.insertImage(
-                              getContentResolver(),
-                              preview,
-                              title,
-                              "FilmFilter");
-
-                      if(uri!=null)
-                          Toast.makeText(this,
-                                  "사진을 저장했습니다.",
-                                  Toast.LENGTH_SHORT).show();
-                      else
-                          Toast.makeText(this,
-                                  "저장 실패",
-                                  Toast.LENGTH_SHORT).show();
-
-                  } catch(Exception e) {
-                      Toast.makeText(this,
-                              "저장 실패",
-                              Toast.LENGTH_SHORT).show();
-                  }
-              }
-          }
-          EOF
+          echo "App files:"
+          find app -maxdepth 4 -type f | sort
 
       - name: Build APK
-        run: gradle assembleDebug --stacktrace
+        run: |
+          gradle assembleDebug --stacktrace
 
       - name: Check APK
+        shell: bash
         run: |
-          test -f app/build/outputs/apk/debug/app-debug.apk
-          ls -lh app/build/outputs/apk/debug/app-debug.apk
+          set -e
+
+          APK="app/build/outputs/apk/debug/app-debug.apk"
+
+          if [ ! -f "$APK" ]; then
+            echo "ERROR: APK was not created"
+            find app/build -type f | sort || true
+            exit 1
+          fi
+
+          echo "APK created successfully:"
+          ls -lh "$APK"
 
       - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
-          name: FilmFilter-v3-debug
+          name: FilmFilter-Pro-v4
           path: app/build/outputs/apk/debug/app-debug.apk
           if-no-files-found: error
