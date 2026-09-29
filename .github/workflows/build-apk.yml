@@ -51,7 +51,7 @@ jobs:
           unzip -q "$ZIP" -d /tmp/filmfilter-v6
 
           ROOT=$(find /tmp/filmfilter-v6 \
-            -name settings.gradle -o -name settings.gradle.kts \
+            \( -name settings.gradle -o -name settings.gradle.kts \) \
             -print -quit)
 
           if [ -z "$ROOT" ]; then
@@ -92,4 +92,37 @@ jobs:
             echo "Using installed Gradle 8.11.1."
           fi
 
-      -
+      - name: Build Debug APK
+        shell: bash
+        run: |
+          set -e
+
+          if [ -f "./gradlew" ]; then
+            ./gradlew assembleDebug --stacktrace
+          else
+            gradle assembleDebug --stacktrace
+          fi
+
+      - name: Check APK
+        shell: bash
+        run: |
+          set -e
+
+          APK="app/build/outputs/apk/debug/app-debug.apk"
+
+          if [ ! -f "$APK" ]; then
+            echo "ERROR: APK was not created."
+            echo "Build output:"
+            find app/build -type f | sort || true
+            exit 1
+          fi
+
+          echo "APK created successfully:"
+          ls -lh "$APK"
+
+      - name: Upload APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: FilmFilter-v6-debug
+          path: app/build/outputs/apk/debug/app-debug.apk
+          if-no-files-found: error
