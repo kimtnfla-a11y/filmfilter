@@ -1,4 +1,4 @@
-name: FilmFilter v6 APK
+name: FilmFilter v7 APK
 
 on:
   workflow_dispatch:
@@ -11,19 +11,15 @@ permissions:
 
 jobs:
   build:
-    name: Build FilmFilter v6
+    name: Build FilmFilter v7
     runs-on: ubuntu-latest
 
     steps:
-      # ─────────────────────────────────────
       # 1. Checkout
-      # ─────────────────────────────────────
       - name: Checkout
         uses: actions/checkout@v4
 
-      # ─────────────────────────────────────
       # 2. Java 17
-      # ─────────────────────────────────────
       - name: Setup Java 17
         uses: actions/setup-java@v5
         with:
@@ -31,23 +27,17 @@ jobs:
           java-version: "17"
           cache: gradle
 
-      # ─────────────────────────────────────
       # 3. Android SDK
-      # ─────────────────────────────────────
       - name: Setup Android SDK
         uses: android-actions/setup-android@v4
 
-      # ─────────────────────────────────────
       # 4. Gradle 8.11.1
-      # ─────────────────────────────────────
       - name: Setup Gradle
         uses: gradle/actions/setup-gradle@v4
         with:
           gradle-version: "8.11.1"
 
-      # ─────────────────────────────────────
-      # 5. Verify Java / Gradle
-      # ─────────────────────────────────────
+      # 5. Verify build environment
       - name: Verify build environment
         shell: bash
         run: |
@@ -64,18 +54,16 @@ jobs:
           echo "===== GRADLE ====="
           gradle --version
 
-      # ─────────────────────────────────────
-      # 6. Extract FilmFilter v6
-      # ─────────────────────────────────────
-      - name: Extract FilmFilter v6
+      # 6. Extract FilmFilter v7
+      - name: Extract FilmFilter v7
         shell: bash
         run: |
           set -e
 
-          ZIP="FilmFilter_Pro_v6.zip"
+          ZIP="FilmFilter_Pro_v7.zip"
 
           echo "======================================"
-          echo "FilmFilter v6"
+          echo "FilmFilter v7"
           echo "ZIP: $ZIP"
           echo "======================================"
 
@@ -87,19 +75,18 @@ jobs:
             exit 1
           fi
 
-          rm -rf /tmp/filmfilter-v6
-          mkdir -p /tmp/filmfilter-v6
+          rm -rf /tmp/filmfilter-v7
+          mkdir -p /tmp/filmfilter-v7
 
           echo "Extracting $ZIP..."
-
-          unzip -q "$ZIP" -d /tmp/filmfilter-v6
+          unzip -q "$ZIP" -d /tmp/filmfilter-v7
 
           echo ""
           echo "ZIP contents:"
-          find /tmp/filmfilter-v6 -maxdepth 6 -type f | sort
+          find /tmp/filmfilter-v7 -maxdepth 6 -type f | sort
 
-          # Android 프로젝트의 settings.gradle 탐색
-          ROOT=$(find /tmp/filmfilter-v6 \
+          # Find Android project
+          ROOT=$(find /tmp/filmfilter-v7 \
             \( -name settings.gradle -o -name settings.gradle.kts \) \
             -print -quit)
 
@@ -118,9 +105,10 @@ jobs:
           echo "$ROOT"
           echo "======================================"
 
-          # 기존 작업 디렉터리 정리
+          # Clean old project files
           rm -rf app
           rm -rf gradle
+
           rm -f settings.gradle
           rm -f settings.gradle.kts
           rm -f build.gradle
@@ -129,19 +117,16 @@ jobs:
           rm -f gradlew
           rm -f gradlew.bat
 
-          # Android 프로젝트 복사
+          # Copy v7 Android project
           cp -a "$ROOT"/. .
 
           echo ""
           echo "Android project copied."
-
           echo ""
           echo "Project structure:"
           find . -maxdepth 5 -type f | sort
 
-      # ─────────────────────────────────────
       # 7. Verify Android project
-      # ─────────────────────────────────────
       - name: Verify Android project
         shell: bash
         run: |
@@ -169,9 +154,7 @@ jobs:
           echo ""
           echo "Android project structure OK."
 
-      # ─────────────────────────────────────
-      # 8. Make Gradle wrapper executable
-      # ─────────────────────────────────────
+      # 8. Prepare Gradle
       - name: Prepare Gradle
         shell: bash
         run: |
@@ -183,16 +166,14 @@ jobs:
             echo "Using Gradle 8.11.1 installed by setup-gradle."
           fi
 
-      # ─────────────────────────────────────
       # 9. Build Debug APK
-      # ─────────────────────────────────────
       - name: Build Debug APK
         shell: bash
         run: |
           set -e
 
           echo "======================================"
-          echo "Building FilmFilter v6 Debug APK"
+          echo "Building FilmFilter v7 Debug APK"
           echo "======================================"
 
           if [ -f "./gradlew" ]; then
@@ -209,9 +190,7 @@ jobs:
               --no-daemon
           fi
 
-      # ─────────────────────────────────────
       # 10. Verify APK
-      # ─────────────────────────────────────
       - name: Check APK
         shell: bash
         run: |
@@ -232,19 +211,17 @@ jobs:
 
           echo ""
           echo "======================================"
-          echo "BUILD SUCCESS"
+          echo "FILMFILTER V7 BUILD SUCCESS"
           echo "======================================"
           echo ""
           echo "APK:"
           ls -lh "$APK"
 
-      # ─────────────────────────────────────
       # 11. Upload APK
-      # ─────────────────────────────────────
       - name: Upload Debug APK
         uses: actions/upload-artifact@v4
         with:
-          name: FilmFilter-v6-debug
+          name: FilmFilter-v7-debug
           path: app/build/outputs/apk/debug/app-debug.apk
           if-no-files-found: error
           retention-days: 14
