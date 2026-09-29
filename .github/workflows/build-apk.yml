@@ -67,6 +67,7 @@ jobs:
           set -e
 
           ZIP="FilmFilter_Pro_v7.zip"
+          EXTRACT_DIR="/tmp/filmfilter-v7"
 
           echo "======================================"
           echo "FilmFilter v7"
@@ -81,46 +82,57 @@ jobs:
             exit 1
           fi
 
-          rm -rf /tmp/filmfilter-v7
-          mkdir -p /tmp/filmfilter-v7
+          rm -rf "$EXTRACT_DIR"
+          mkdir -p "$EXTRACT_DIR"
 
           echo ""
           echo "Extracting ZIP..."
 
-          unzip -q "$ZIP" -d /tmp/filmfilter-v7
+          unzip -q "$ZIP" -d "$EXTRACT_DIR"
 
           echo ""
           echo "======================================"
           echo "ZIP CONTENTS"
           echo "======================================"
 
-          find /tmp/filmfilter-v7 -maxdepth 7 -type f | sort
+          find "$EXTRACT_DIR" -maxdepth 8 -type f | sort
 
-          # Find Android project
-          ROOT=$(find /tmp/filmfilter-v7 \
-            -name settings.gradle -o -name settings.gradle.kts \
-            -print -quit)
+          # 현재 ZIP 구조:
+          # /tmp/filmfilter-v7/FilmFilter_v7/
+          # ├── app/
+          # ├── build.gradle
+          # ├── settings.gradle
+          # └── gradle.properties
 
-          if [ -z "$ROOT" ]; then
-            echo ""
-            echo "ERROR: Android project not found inside ZIP."
-            echo ""
-            echo "settings.gradle or settings.gradle.kts is missing."
-            echo ""
-            echo "ZIP structure:"
-            find /tmp/filmfilter-v7 -maxdepth 8 -print | sort
-            exit 1
-          fi
-
-          ROOT=$(dirname "$ROOT")
+          PROJECT_DIR="$EXTRACT_DIR/FilmFilter_v7"
 
           echo ""
           echo "======================================"
-          echo "ANDROID PROJECT FOUND"
+          echo "ANDROID PROJECT"
           echo "======================================"
-          echo "$ROOT"
+          echo "$PROJECT_DIR"
 
-          # Remove old project files
+          if [ ! -d "$PROJECT_DIR" ]; then
+            echo "ERROR: FilmFilter_v7 directory not found."
+            exit 1
+          fi
+
+          if [ ! -f "$PROJECT_DIR/settings.gradle" ]; then
+            echo "ERROR: settings.gradle not found."
+            exit 1
+          fi
+
+          if [ ! -d "$PROJECT_DIR/app" ]; then
+            echo "ERROR: app directory not found."
+            exit 1
+          fi
+
+          if [ ! -f "$PROJECT_DIR/app/build.gradle" ]; then
+            echo "ERROR: app/build.gradle not found."
+            exit 1
+          fi
+
+          # 기존 프로젝트 파일 제거
           rm -rf app
           rm -rf gradle
 
@@ -132,8 +144,8 @@ jobs:
           rm -f gradlew
           rm -f gradlew.bat
 
-          # Copy Android project from ZIP
-          cp -a "$ROOT"/. .
+          # Android 프로젝트 복사
+          cp -a "$PROJECT_DIR"/. .
 
           echo ""
           echo "======================================"
@@ -152,9 +164,13 @@ jobs:
           echo "VERIFY ANDROID PROJECT"
           echo "======================================"
 
-          if [ ! -f "settings.gradle" ] && \
-             [ ! -f "settings.gradle.kts" ]; then
+          if [ ! -f "settings.gradle" ]; then
             echo "ERROR: settings.gradle not found."
+            exit 1
+          fi
+
+          if [ ! -f "build.gradle" ]; then
+            echo "ERROR: build.gradle not found."
             exit 1
           fi
 
@@ -163,11 +179,109 @@ jobs:
             exit 1
           fi
 
-          if [ ! -f "app/build.gradle" ] && \
-             [ ! -f "app/build.gradle.kts" ]; then
+          if [ ! -f "app/build.gradle" ]; then
             echo "ERROR: app/build.gradle not found."
             exit 1
           fi
 
           echo ""
-          echo "Android
+          echo "Android project structure OK."
+
+      # 8. Prepare Gradle
+      - name: Prepare Gradle
+        shell: bash
+        run: |
+          set -e
+
+          if [ -f "./gradlew" ]; then
+            chmod +x ./gradlew
+            echo "Gradle wrapper found."
+          else
+            echo "Gradle wrapper not found."
+            echo "Using Gradle 8.11.1."
+          fi
+
+      # 9. Build Debug APK
+      - name: Build Debug APK
+        shell: bash
+        run: |
+          set -e
+
+          echo "======================================"
+          echo "BUILDING FILMFILTER V7"
+          echo "======================================"
+
+          if [ -f "./gradlew" ]; then
+
+            ./gradlew \
+              clean \
+              assembleDebug \
+              --stacktrace \
+              --no-daemon \
+              --console=plain
+
+          else
+
+            gradle \
+              clean \
+              assembleDebug \
+              --stacktrace \
+              --no-daemon \
+              --console=plain
+
+          fi
+
+      # 10. Find APK
+      - name: Find APK
+        shell: bash
+        run: |
+          set -e
+
+          echo "======================================"
+          echo "SEARCHING FOR APK"
+          echo "======================================"
+
+          find . \
+            -type f \
+            -name "*.apk" \
+            -not -path "./.gradle/*" \
+            -print
+
+      # 11. Check APK
+      - name: Check APK
+        shell: bash
+        run: |
+          set -e
+
+          APK="app/build/outputs/apk/debug/app-debug.apk"
+
+          echo ""
+          echo "======================================"
+          echo "CHECK APK"
+          echo "======================================"
+
+          if [ ! -f "$APK" ]; then
+            echo "ERROR: APK was not created."
+            echo ""
+            echo "Build output:"
+            find app/build -type f 2>/dev/null | sort || true
+            exit 1
+          fi
+
+          echo ""
+          echo "======================================"
+          echo "FILMFILTER V7 BUILD SUCCESS"
+          echo "======================================"
+
+          echo ""
+          echo "APK:"
+          ls -lh "$APK"
+
+      # 12. Upload Debug APK
+      - name: Upload Debug APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: FilmFilter-v7-debug
+          path: app/build/outputs/apk/debug/app-debug.apk
+          if-no-files-found: error
+          retention-days: 14
