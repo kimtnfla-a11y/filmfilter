@@ -1,10 +1,13 @@
-name: FilmFilter v5 APK
+name: FilmFilter v6 APK
 
 on:
   workflow_dispatch:
   push:
     branches:
       - main
+
+permissions:
+  contents: read
 
 jobs:
   build:
@@ -28,30 +31,38 @@ jobs:
         with:
           gradle-version: "8.11.1"
 
-      - name: Extract FilmFilter v5
+      - name: Extract FilmFilter v6
         shell: bash
         run: |
           set -e
 
-          rm -rf /tmp/filmfilter-v5
-          mkdir -p /tmp/filmfilter-v5
+          ZIP="FilmFilter_Pro_v6.zip"
 
-          unzip -q FilmFilter_Pro_v5.zip -d /tmp/filmfilter-v5
+          if [ ! -f "$ZIP" ]; then
+            echo "ERROR: $ZIP not found"
+            echo "Repository files:"
+            find . -maxdepth 3 -type f | sort
+            exit 1
+          fi
 
-          ROOT=$(find /tmp/filmfilter-v5 \
-            -name settings.gradle \
-            -o -name settings.gradle.kts \
-            | head -n 1)
+          rm -rf /tmp/filmfilter-v6
+          mkdir -p /tmp/filmfilter-v6
+
+          unzip -q "$ZIP" -d /tmp/filmfilter-v6
+
+          ROOT=$(find /tmp/filmfilter-v6 \
+            -name settings.gradle -o -name settings.gradle.kts \
+            -print -quit)
 
           if [ -z "$ROOT" ]; then
-            echo "ERROR: Android project not found"
-            find /tmp/filmfilter-v5 -maxdepth 3 -type f | sort
+            echo "ERROR: Android project not found inside $ZIP"
+            find /tmp/filmfilter-v6 -maxdepth 5 -type f | sort
             exit 1
           fi
 
           ROOT=$(dirname "$ROOT")
 
-          echo "Using project:"
+          echo "Using Android project:"
           echo "$ROOT"
 
           cp -a "$ROOT"/. .
@@ -59,34 +70,26 @@ jobs:
           echo "Project files:"
           ls -la
 
-          echo "App files:"
-          find app -maxdepth 5 -type f | sort
-
-      - name: Build APK
-        shell: bash
-        run: |
-          set -e
-          gradle assembleDebug --stacktrace
-
-      - name: Check APK
-        shell: bash
-        run: |
-          set -e
-
-          APK="app/build/outputs/apk/debug/app-debug.apk"
-
-          if [ ! -f "$APK" ]; then
-            echo "ERROR: APK was not created"
-            find app/build -type f | sort || true
+          if [ ! -d "app" ]; then
+            echo "ERROR: app directory not found"
+            find . -maxdepth 4 -type f | sort
             exit 1
           fi
 
-          echo "APK created successfully:"
-          ls -lh "$APK"
+          echo "App files:"
+          find app -maxdepth 6 -type f | sort
 
-      - name: Upload APK
-        uses: actions/upload-artifact@v4
-        with:
-          name: FilmFilter-v5-debug
-          path: app/build/outputs/apk/debug/app-debug.apk
-          if-no-files-found: error
+      - name: Check Gradle project
+        shell: bash
+        run: |
+          set -e
+
+          if [ -f "./gradlew" ]; then
+            chmod +x ./gradlew
+            echo "Gradle wrapper found."
+          else
+            echo "Gradle wrapper not found."
+            echo "Using installed Gradle 8.11.1."
+          fi
+
+      -
