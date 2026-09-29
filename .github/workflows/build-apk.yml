@@ -879,4 +879,212 @@ jobs:
                               nr * 0.93f;
 
                           ng = 0.035f +
-                             
+                              ng * 0.93f;
+
+                          nb = 0.045f +
+                              nb * 0.94f;
+                          break;
+
+                      case 4:
+                          // Classic
+                          nr = (float)
+                              Math.pow(r, 0.97);
+
+                          ng = (float)
+                              Math.pow(g, 0.98);
+
+                          nb = (float)
+                              Math.pow(b, 1.02);
+
+                          nr *= 1.02f;
+                          break;
+
+                      case 5:
+                          // Faded
+                          nr = 0.08f +
+                              r * 0.84f;
+
+                          ng = 0.08f +
+                              g * 0.84f;
+
+                          nb = 0.09f +
+                              b * 0.84f;
+
+                          break;
+
+                      case 6:
+                          // Cool
+                          nr = r * 0.94f;
+                          ng = g * 0.99f;
+                          nb = b * 1.08f;
+                          break;
+
+                      case 7:
+                          // Green
+                          nr = r * 0.96f;
+                          ng = g * 1.07f;
+                          nb = b * 0.98f;
+                          break;
+
+                      case 8:
+                          // Retro
+                          nr = contrast(r, 1.12f);
+                          ng = contrast(g, 1.08f);
+                          nb = contrast(b, 1.02f);
+
+                          nr += 0.025f;
+                          nb -= 0.015f;
+                          break;
+
+                      case 9:
+                          // Dream
+                          nr = r * 1.03f + 0.025f;
+                          ng = g * 1.01f + 0.018f;
+                          nb = b * 1.04f + 0.025f;
+
+                          nr = lum +
+                              (nr - lum) * 0.78f;
+
+                          ng = lum +
+                              (ng - lum) * 0.78f;
+
+                          nb = lum +
+                              (nb - lum) * 0.78f;
+                          break;
+
+                      case 10:
+                          // B&W
+                          nr = lum;
+                          ng = lum;
+                          nb = lum;
+                          break;
+
+                      case 11:
+                          // Mono Fade
+                          nr = 0.08f +
+                              lum * 0.82f;
+
+                          ng = nr;
+                          nb = nr;
+
+                          nr += 0.018f;
+                          nb -= 0.008f;
+                          break;
+                  }
+
+                  return new float[]{
+                      clamp(nr),
+                      clamp(ng),
+                      clamp(nb)
+                  };
+              }
+
+              private float contrast(
+                  float value,
+                  float amount
+              ) {
+
+                  return clamp(
+                      0.5f +
+                      (value - 0.5f) * amount
+                  );
+              }
+
+              private float clamp(
+                  float value
+              ) {
+
+                  return Math.max(
+                      0f,
+                      Math.min(
+                          1f,
+                          value
+                      )
+                  );
+              }
+
+              private void savePhoto() {
+
+                  if (currentBitmap == null) {
+
+                      Toast.makeText(
+                          this,
+                          "저장할 사진이 없습니다.",
+                          Toast.LENGTH_SHORT
+                      ).show();
+
+                      return;
+                  }
+
+                  try {
+
+                      String name =
+                          "FilmFilter_" +
+                          System.currentTimeMillis();
+
+                      String uri =
+                          MediaStore.Images.Media
+                              .insertImage(
+                                  getContentResolver(),
+                                  currentBitmap,
+                                  name,
+                                  "FilmFilter"
+                              );
+
+                      if (uri != null) {
+
+                          Toast.makeText(
+                              this,
+                              "갤러리에 저장했습니다.",
+                              Toast.LENGTH_SHORT
+                          ).show();
+
+                          statusText.setText(
+                              "저장 완료"
+                          );
+
+                      } else {
+
+                          Toast.makeText(
+                              this,
+                              "저장에 실패했습니다.",
+                              Toast.LENGTH_SHORT
+                          ).show();
+                      }
+
+                  } catch (Exception e) {
+
+                      e.printStackTrace();
+
+                      Toast.makeText(
+                          this,
+                          "사진 저장에 실패했습니다.",
+                          Toast.LENGTH_SHORT
+                      ).show();
+                  }
+              }
+          }
+          EOF
+
+      - name: Build APK
+        shell: bash
+        run: |
+          set -e
+          gradle assembleDebug --stacktrace
+
+      - name: Check APK
+        shell: bash
+        run: |
+          set -e
+
+          echo "Generated APK files:"
+          find . -type f -name "*.apk" -print
+
+          test -f app/build/outputs/apk/debug/app-debug.apk
+
+      - name: Upload APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: FilmFilter-v2-debug-apk
+          path: app/build/outputs/apk/debug/app-debug.apk
+          if-no-files-found: error
