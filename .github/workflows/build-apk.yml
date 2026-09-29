@@ -15,6 +15,7 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
+
       # 1. Checkout
       - name: Checkout
         uses: actions/checkout@v4
@@ -25,7 +26,6 @@ jobs:
         with:
           distribution: temurin
           java-version: "17"
-          cache: gradle
 
       # 3. Android SDK
       - name: Setup Android SDK
@@ -43,15 +43,21 @@ jobs:
         run: |
           set -e
 
-          echo "===== JAVA ====="
+          echo "======================================"
+          echo "JAVA"
+          echo "======================================"
           java -version
 
           echo ""
-          echo "===== JAVAC ====="
+          echo "======================================"
+          echo "JAVAC"
+          echo "======================================"
           javac -version
 
           echo ""
-          echo "===== GRADLE ====="
+          echo "======================================"
+          echo "GRADLE"
+          echo "======================================"
           gradle --version
 
       # 6. Extract FilmFilter v7
@@ -71,29 +77,38 @@ jobs:
             echo "ERROR: $ZIP not found"
             echo ""
             echo "Repository files:"
-            find . -maxdepth 4 -type f | sort
+            find . -maxdepth 5 -type f | sort
             exit 1
           fi
 
           rm -rf /tmp/filmfilter-v7
           mkdir -p /tmp/filmfilter-v7
 
-          echo "Extracting $ZIP..."
+          echo ""
+          echo "Extracting ZIP..."
+
           unzip -q "$ZIP" -d /tmp/filmfilter-v7
 
           echo ""
-          echo "ZIP contents:"
-          find /tmp/filmfilter-v7 -maxdepth 6 -type f | sort
+          echo "======================================"
+          echo "ZIP CONTENTS"
+          echo "======================================"
+
+          find /tmp/filmfilter-v7 -maxdepth 7 -type f | sort
 
           # Find Android project
           ROOT=$(find /tmp/filmfilter-v7 \
-            \( -name settings.gradle -o -name settings.gradle.kts \) \
+            -name settings.gradle -o -name settings.gradle.kts \
             -print -quit)
 
           if [ -z "$ROOT" ]; then
             echo ""
             echo "ERROR: Android project not found inside ZIP."
+            echo ""
             echo "settings.gradle or settings.gradle.kts is missing."
+            echo ""
+            echo "ZIP structure:"
+            find /tmp/filmfilter-v7 -maxdepth 8 -print | sort
             exit 1
           fi
 
@@ -101,11 +116,11 @@ jobs:
 
           echo ""
           echo "======================================"
-          echo "Android project found:"
-          echo "$ROOT"
+          echo "ANDROID PROJECT FOUND"
           echo "======================================"
+          echo "$ROOT"
 
-          # Clean old project files
+          # Remove old project files
           rm -rf app
           rm -rf gradle
 
@@ -117,14 +132,15 @@ jobs:
           rm -f gradlew
           rm -f gradlew.bat
 
-          # Copy v7 Android project
+          # Copy Android project from ZIP
           cp -a "$ROOT"/. .
 
           echo ""
-          echo "Android project copied."
-          echo ""
-          echo "Project structure:"
-          find . -maxdepth 5 -type f | sort
+          echo "======================================"
+          echo "ANDROID PROJECT COPIED"
+          echo "======================================"
+
+          find . -maxdepth 6 -type f | sort
 
       # 7. Verify Android project
       - name: Verify Android project
@@ -132,7 +148,9 @@ jobs:
         run: |
           set -e
 
-          echo "Checking Android project..."
+          echo "======================================"
+          echo "VERIFY ANDROID PROJECT"
+          echo "======================================"
 
           if [ ! -f "settings.gradle" ] && \
              [ ! -f "settings.gradle.kts" ]; then
@@ -152,76 +170,4 @@ jobs:
           fi
 
           echo ""
-          echo "Android project structure OK."
-
-      # 8. Prepare Gradle
-      - name: Prepare Gradle
-        shell: bash
-        run: |
-          if [ -f "./gradlew" ]; then
-            chmod +x ./gradlew
-            echo "Gradle wrapper found."
-          else
-            echo "Gradle wrapper not found."
-            echo "Using Gradle 8.11.1 installed by setup-gradle."
-          fi
-
-      # 9. Build Debug APK
-      - name: Build Debug APK
-        shell: bash
-        run: |
-          set -e
-
-          echo "======================================"
-          echo "Building FilmFilter v7 Debug APK"
-          echo "======================================"
-
-          if [ -f "./gradlew" ]; then
-            ./gradlew \
-              clean \
-              assembleDebug \
-              --stacktrace \
-              --no-daemon
-          else
-            gradle \
-              clean \
-              assembleDebug \
-              --stacktrace \
-              --no-daemon
-          fi
-
-      # 10. Verify APK
-      - name: Check APK
-        shell: bash
-        run: |
-          set -e
-
-          APK="app/build/outputs/apk/debug/app-debug.apk"
-
-          echo "Checking APK..."
-
-          if [ ! -f "$APK" ]; then
-            echo ""
-            echo "ERROR: APK was not created."
-            echo ""
-            echo "Build output:"
-            find app/build -type f 2>/dev/null | sort || true
-            exit 1
-          fi
-
-          echo ""
-          echo "======================================"
-          echo "FILMFILTER V7 BUILD SUCCESS"
-          echo "======================================"
-          echo ""
-          echo "APK:"
-          ls -lh "$APK"
-
-      # 11. Upload APK
-      - name: Upload Debug APK
-        uses: actions/upload-artifact@v4
-        with:
-          name: FilmFilter-v7-debug
-          path: app/build/outputs/apk/debug/app-debug.apk
-          if-no-files-found: error
-          retention-days: 14
+          echo "Android
